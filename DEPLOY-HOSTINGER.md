@@ -9,7 +9,7 @@ dos outros containers. Rede desse proxy: `ticketz-docker-acme_nginx-proxy`.
 Isso simplifica o deploy: **não precisa editar Nginx nem rodar certbot à
 mão** — só colocar o `panorama_api` na mesma rede e definir duas variáveis
 de ambiente, que já estão configuradas no `docker-compose.panorama.yml`
-para o domínio `painel.grupoepanorama.com.br`.
+para o domínio `pchat.panoramahc.com.br`.
 
 Repositório já criado e no ar: `github.com/fernandocamposti/panorama-home-center`.
 
@@ -23,16 +23,17 @@ Repositório criado no GitHub e código enviado.
 
 ## Parte B — na VPS (via SSH)
 
-### B.1 Apontar o DNS (fazer isso primeiro, propagação leva alguns minutos)
+### B.1 DNS — já feito ✅
 
-No painel de DNS onde `grupoepanorama.com.br` está gerenciado, crie um
-registro **A**: host `painel` → IP público desta VPS (`srv904964`).
-
-Para confirmar o IP da própria VPS:
+`pchat.panoramahc.com.br` → `31.97.82.10`. Só confirme que esse é mesmo o IP
+público desta VPS antes de seguir:
 
 ```bash
 curl -4 ifconfig.me
 ```
+
+Se a propagação do DNS ainda estiver recente, pode levar alguns minutos até
+funcionar globalmente — sem problema, o resto do deploy não depende disso.
 
 ### B.2 Clonar o repositório
 
@@ -97,15 +98,15 @@ docker logs -f ticketz-acme-companion
 ```
 
 (Ctrl+C para sair depois de ver algo como "Certificate obtained" para
-`painel.grupoepanorama.com.br`.)
+`pchat.panoramahc.com.br`.)
 
 ### B.7 Teste final, pelo domínio público
 
 ```bash
-curl https://painel.grupoepanorama.com.br/health
+curl https://pchat.panoramahc.com.br/health
 # esperado: {"status":"ok"}
 
-curl -X POST https://painel.grupoepanorama.com.br/api/auth/login \
+curl -X POST https://pchat.panoramahc.com.br/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"seu@email.com","senha":"senha-forte-aqui"}'
 ```
@@ -120,4 +121,4 @@ Se o login retornar um `token`, o backend está no ar em produção.
 - **Backup do banco**: `docker compose -f docker-compose.panorama.yml exec panorama_postgres pg_dump -U panorama panorama > backup.sql`
 - **Próxima fase**: cadastrar a primeira filial/ativo de teste e instalar o
   agente (`agente-exemplo.js`) numa máquina real apontando para
-  `https://painel.grupoepanorama.com.br/api`.
+  `https://pchat.panoramahc.com.br/api`.

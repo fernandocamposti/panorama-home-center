@@ -44,9 +44,9 @@ services:
       REDIS_URL: redis://panorama_redis:6379
       NODE_ENV: production
       # Lidos automaticamente pelo nginx-proxy / acme-companion já em uso:
-      VIRTUAL_HOST: painel.grupoepanorama.com.br
+      VIRTUAL_HOST: pchat.panoramahc.com.br
       VIRTUAL_PORT: "3000"
-      LETSENCRYPT_HOST: painel.grupoepanorama.com.br
+      LETSENCRYPT_HOST: pchat.panoramahc.com.br
       LETSENCRYPT_EMAIL: jarie@grupoepanorama.com.br
     depends_on:
       - panorama_postgres
@@ -60,7 +60,7 @@ services:
   #   Até lá, subir só postgres + redis + api não dá erro nem falta nada.
   #   Quando existir, provavelmente vai precisar de um subdomínio próprio
   #   (ex.: app.grupoepanorama.com.br) com seu próprio VIRTUAL_HOST/LETSENCRYPT_HOST,
-  #   já que o painel.grupoepanorama.com.br desta API ficará ocupado pela API.
+  #   já que o pchat.panoramahc.com.br desta API ficará ocupado pela API.
   #   build: ./frontend
   #   container_name: panorama_frontend
   #   restart: unless-stopped
