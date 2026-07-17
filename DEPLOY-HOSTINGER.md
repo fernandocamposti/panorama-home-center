@@ -9,7 +9,7 @@ dos outros containers. Rede desse proxy: `ticketz-docker-acme_nginx-proxy`.
 Isso simplifica o deploy: **não precisa editar Nginx nem rodar certbot à
 mão** — só colocar o `panorama_api` na mesma rede e definir duas variáveis
 de ambiente, que já estão configuradas no `docker-compose.panorama.yml`
-para o domínio `pchat.panoramahc.com.br`.
+para o domínio `painel.panoramahc.com.br`.
 
 Repositório já criado e no ar: `github.com/fernandocamposti/panorama-home-center`.
 
@@ -23,10 +23,13 @@ Repositório criado no GitHub e código enviado.
 
 ## Parte B — na VPS (via SSH)
 
-### B.1 DNS — já feito ✅
+### B.1 Apontar o DNS
 
-`pchat.panoramahc.com.br` → `31.97.82.10`. Só confirme que esse é mesmo o IP
-público desta VPS antes de seguir:
+⚠️ `pchat.panoramahc.com.br` já é usado pelo Ticketz — NÃO reaproveitar esse
+subdomínio. Crie um registro **A** novo: host `painel` → `31.97.82.10`
+(mesma VPS, subdomínio diferente: `painel.panoramahc.com.br`).
+
+Confirme que esse é o IP público desta VPS antes de seguir:
 
 ```bash
 curl -4 ifconfig.me
@@ -98,15 +101,15 @@ docker logs -f ticketz-acme-companion
 ```
 
 (Ctrl+C para sair depois de ver algo como "Certificate obtained" para
-`pchat.panoramahc.com.br`.)
+`painel.panoramahc.com.br`.)
 
 ### B.7 Teste final, pelo domínio público
 
 ```bash
-curl https://pchat.panoramahc.com.br/health
+curl https://painel.panoramahc.com.br/health
 # esperado: {"status":"ok"}
 
-curl -X POST https://pchat.panoramahc.com.br/api/auth/login \
+curl -X POST https://painel.panoramahc.com.br/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"seu@email.com","senha":"senha-forte-aqui"}'
 ```
@@ -121,4 +124,4 @@ Se o login retornar um `token`, o backend está no ar em produção.
 - **Backup do banco**: `docker compose -f docker-compose.panorama.yml exec panorama_postgres pg_dump -U panorama panorama > backup.sql`
 - **Próxima fase**: cadastrar a primeira filial/ativo de teste e instalar o
   agente (`agente-exemplo.js`) numa máquina real apontando para
-  `https://pchat.panoramahc.com.br/api`.
+  `https://painel.panoramahc.com.br/api`.
