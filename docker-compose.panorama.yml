@@ -43,17 +43,20 @@ services:
       DATABASE_URL: postgres://panorama:TROQUE_ESTA_SENHA@panorama_postgres:5432/panorama
       REDIS_URL: redis://panorama_redis:6379
       NODE_ENV: production
-      # Lidos automaticamente pelo nginx-proxy / acme-companion já em uso:
-      VIRTUAL_HOST: painel.panoramahc.com.br
-      VIRTUAL_PORT: "3000"
-      LETSENCRYPT_HOST: painel.panoramahc.com.br
-      LETSENCRYPT_EMAIL: jarie@grupoepanorama.com.br
+      # ETAPA 2 (fazer só quando você confirmar que quer expor ao público):
+      # descomente as 4 linhas abaixo E a linha "nginx_proxy_net" logo depois.
+      # Enquanto comentado, este container fica 100% isolado do Ticketz —
+      # nem a rede do proxy nem o domínio público têm qualquer contato com ele.
+      # VIRTUAL_HOST: painel.panoramahc.com.br
+      # VIRTUAL_PORT: "3000"
+      # LETSENCRYPT_HOST: painel.panoramahc.com.br
+      # LETSENCRYPT_EMAIL: jarie@grupoepanorama.com.br
     depends_on:
       - panorama_postgres
       - panorama_redis
     networks:
       - panorama_net
-      - nginx_proxy_net   # para o nginx-proxy do Ticketz conseguir alcançar este container
+      # - nginx_proxy_net   # ETAPA 2 — descomentar junto com as envs acima
 
   # panorama_frontend:
   #   Descomentar quando o frontend React (Fase 3 do roadmap) estiver pronto.
