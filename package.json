@@ -1,0 +1,13 @@
+{
+  "name": "panorama-agente",
+  "version": "0.1.0",
+  "description": "Agente de coleta de métricas para o painel Panorama Home Center",
+  "main": "agente-exemplo.js",
+  "scripts": {
+    "start": "node agente-exemplo.js"
+  },
+  "dependencies": {
+    "systeminformation": "^5.22.0",
+    "node-fetch": "^2.7.0"
+  }
+}

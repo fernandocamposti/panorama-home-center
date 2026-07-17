@@ -1,0 +1,67 @@
+# Stack do Panorama, isolado do Whaticket.
+# Nomes de container, rede e volumes com prefixo "panorama_" de propósito,
+# para nunca colidir com o que o Whaticket já usa nesta VPS.
+#
+# Importante: a API só é exposta em 127.0.0.1 (localhost), nunca direto na
+# internet — quem fala com o público é o Nginx do host (ou o proxy que já
+# existir), que faz o encaminhamento por subdomínio até essa porta local.
+
+version: "3.9"
+
+services:
+  panorama_postgres:
+    image: postgres:16
+    container_name: panorama_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: panorama
+      POSTGRES_PASSWORD: TROQUE_ESTA_SENHA
+      POSTGRES_DB: panorama
+    volumes:
+      - panorama_pg_data:/var/lib/postgresql/data
+    networks:
+      - panorama_net
+    # Não publicar porta no host — só a própria API do Panorama acessa,
+    # via rede interna do Docker (panorama_net).
+
+  panorama_redis:
+    image: redis:7-alpine
+    container_name: panorama_redis
+    restart: unless-stopped
+    networks:
+      - panorama_net
+
+  panorama_api:
+    build: ./api          # pasta com o backend Node.js (Fastify) do Panorama
+    container_name: panorama_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://panorama:TROQUE_ESTA_SENHA@panorama_postgres:5432/panorama
+      REDIS_URL: redis://panorama_redis:6379
+      NODE_ENV: production
+    depends_on:
+      - panorama_postgres
+      - panorama_redis
+    networks:
+      - panorama_net
+    ports:
+      - "127.0.0.1:3001:3000"   # só acessível localmente; o Nginx do host proxeia até aqui
+
+  # panorama_frontend:
+  #   Descomentar quando o frontend React (Fase 3 do roadmap) estiver pronto.
+  #   Até lá, subir só postgres + redis + api não dá erro nem falta nada.
+  #   build: ./frontend
+  #   container_name: panorama_frontend
+  #   restart: unless-stopped
+  #   networks:
+  #     - panorama_net
+  #   ports:
+  #     - "127.0.0.1:3002:80"
+
+networks:
+  panorama_net:
+    name: panorama_net
+
+volumes:
+  panorama_pg_data:
+    name: panorama_pg_data
