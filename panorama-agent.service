@@ -13,7 +13,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/panorama-agente
-Environment=PANORAMA_API_URL=https://painel.panoramahomecenter.com.br/api
+Environment=PANORAMA_API_URL=https://painel.panoramahc.com.br/api
 Environment=PANORAMA_AGENT_TOKEN=SUBSTITUA_PELO_TOKEN_DO_ATIVO
 Environment=PANORAMA_INTERVAL_MS=60000
 ExecStart=/usr/bin/node /opt/panorama-agente/agente-exemplo.js

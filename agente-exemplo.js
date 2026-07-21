@@ -1,33 +1,53 @@
 /**
- * Panorama Home Center — Agente de monitoramento (esqueleto)
+ * Panorama Home Center — Agente de monitoramento
  * ------------------------------------------------------------
  * Roda em cada computador/servidor (Windows ou Linux), coleta métricas
  * básicas e envia para a API central via HTTPS a cada intervalo fixo.
  *
- * Este é um PONTO DE PARTIDA, não código de produção. Antes de instalar
- * em máquinas reais: mover o token para fora do código-fonte, validar
- * o certificado TLS do servidor, e testar o comportamento offline
- * (fila local + reenvio quando a rede voltar).
+ * Configuração: lida de um arquivo "config.json" na MESMA pasta do
+ * executável (veja config.exemplo.json). Também aceita variáveis de
+ * ambiente (PANORAMA_API_URL, PANORAMA_AGENT_TOKEN, PANORAMA_INTERVAL_MS),
+ * que têm prioridade sobre o arquivo — útil para testes rápidos.
  *
- * Dependências:
- *   npm install systeminformation node-fetch
- *
- * Variáveis de ambiente esperadas:
- *   PANORAMA_API_URL   -> ex: https://painel.panoramahomecenter.com.br/api
- *   PANORAMA_AGENT_TOKEN -> token gerado no cadastro do ativo no dashboard
- *   PANORAMA_INTERVAL_MS -> opcional, padrão 60000 (60s)
+ * Este script é o mesmo usado tanto rodando via `node agente-exemplo.js`
+ * quanto compilado como executável standalone (pkg) — não precisa de
+ * Node.js instalado na máquina de destino quando compilado.
  */
 
-const si = require("systeminformation");
-const fetch = require("node-fetch");
+const fs = require("fs");
+const path = require("path");
 const os = require("os");
+const si = require("systeminformation");
 
-const API_URL = process.env.PANORAMA_API_URL || "https://painel.panoramahomecenter.com.br/api";
-const TOKEN = process.env.PANORAMA_AGENT_TOKEN;
-const INTERVAL_MS = Number(process.env.PANORAMA_INTERVAL_MS || 60000);
+function carregarConfig() {
+  // process.pkg só existe quando rodando dentro do executável compilado —
+  // nesse caso, usamos a pasta onde o .exe está, não uma pasta temporária interna.
+  const dirBase = process.pkg ? path.dirname(process.execPath) : __dirname;
+  const configPath = path.join(dirBase, "config.json");
 
-if (!TOKEN) {
-  console.error("[agente] PANORAMA_AGENT_TOKEN não definido. Encerrando.");
+  let arquivo = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      arquivo = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    } catch (e) {
+      console.error(`[agente] Falha ao ler ${configPath}:`, e.message);
+    }
+  }
+
+  return {
+    apiUrl: process.env.PANORAMA_API_URL || arquivo.apiUrl || "https://painel.panoramahc.com.br/api",
+    token: process.env.PANORAMA_AGENT_TOKEN || arquivo.token,
+    intervalMs: Number(process.env.PANORAMA_INTERVAL_MS || arquivo.intervalMs || 60000),
+    configPath,
+  };
+}
+
+const config = carregarConfig();
+
+if (!config.token) {
+  console.error(
+    `[agente] Token não configurado. Crie o arquivo "${config.configPath}" com {"token": "...", "apiUrl": "..."} ou defina PANORAMA_AGENT_TOKEN. Encerrando.`
+  );
   process.exit(1);
 }
 
@@ -61,24 +81,14 @@ async function coletarMetricas() {
   };
 }
 
-// (Opcional / fase posterior) levanta lista de software instalado.
-// Chamar com menos frequência que o heartbeat (ex.: 1x por dia), pois é mais pesado.
-async function coletarSoftware() {
-  try {
-    const lista = await si.getStaticData().then((d) => d.system);
-    return lista;
-  } catch (e) {
-    console.warn("[agente] Falha ao coletar inventário de software:", e.message);
-    return null;
-  }
-}
-
 async function enviarCheckin(payload) {
-  const resposta = await fetch(`${API_URL}/agents/checkin`, {
+  // fetch nativo do Node 18+ — sem dependência externa (node-fetch),
+  // o que deixa o executável compilado (pkg) mais simples e leve.
+  const resposta = await fetch(`${config.apiUrl}/agents/checkin`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${TOKEN}`,
+      Authorization: `Bearer ${config.token}`,
     },
     body: JSON.stringify(payload),
   });
@@ -102,6 +112,6 @@ async function cicloDeChekin() {
   }
 }
 
-console.log(`[agente] Iniciando — enviando para ${API_URL} a cada ${INTERVAL_MS / 1000}s`);
+console.log(`[agente] Iniciando — enviando para ${config.apiUrl} a cada ${config.intervalMs / 1000}s`);
 cicloDeChekin();
-setInterval(cicloDeChekin, INTERVAL_MS);
+setInterval(cicloDeChekin, config.intervalMs);

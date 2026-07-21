@@ -7,7 +7,9 @@
     "start": "node agente-exemplo.js"
   },
   "dependencies": {
-    "systeminformation": "^5.22.0",
-    "node-fetch": "^2.7.0"
+    "systeminformation": "^5.22.0"
+  },
+  "optionalDependencies": {
+    "node-windows": "^1.0.0-beta.8"
   }
 }
