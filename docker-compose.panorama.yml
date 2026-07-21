@@ -66,6 +66,12 @@ services:
     networks:
       - panorama_net       # para falar com panorama_api
       - nginx_proxy_net    # para o proxy do Ticketz conseguir alcançar este container
+    volumes:
+      # Serve o panorama-agent.exe (gerado por scripts/build-agent-exe.sh) em
+      # https://painel.panoramahc.com.br/agente-download/panorama-agent.exe
+      # — pasta local na VPS, não faz parte da imagem, então atualizar o
+      # arquivo não exige rebuild do container.
+      - ./agent-releases:/usr/share/nginx/html/agente-download:ro
 
 networks:
   panorama_net:

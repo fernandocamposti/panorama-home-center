@@ -1,0 +1,3 @@
+Esta pasta fica vazia no repositório — o panorama-agent.exe é gerado aqui
+pela primeira vez que você rodar scripts/build-agent-exe.sh na VPS, e não é
+versionado no Git (binário grande, gerado sob demanda).
