@@ -4,11 +4,11 @@
 #
 # Este VPS usa nginx-proxy + acme-companion (containers) para expor tudo ao
 # público e emitir SSL automaticamente — não há Nginx instalado direto no
-# host. Por isso o panorama_api entra na MESMA rede Docker que esses dois
-# containers (ticketz-docker-acme_nginx-proxy) e usa as variáveis de
-# ambiente VIRTUAL_HOST / LETSENCRYPT_HOST, que eles leem automaticamente
-# via socket do Docker. Não é preciso editar nenhuma config de Nginx à mão
-# nem rodar certbot — o acme-companion faz isso sozinho ao ver essas envs.
+# host. Só o panorama_frontend entra na rede desse proxy (ticketz-docker-acme_nginx-proxy)
+# e usa VIRTUAL_HOST/LETSENCRYPT_HOST, lidos automaticamente por ele via socket
+# do Docker. O panorama_api fica 100% isolado na rede interna (panorama_net) —
+# o próprio Nginx do container do frontend é quem fala com ela e faz o proxy
+# de /api e /health (ver frontend/nginx.conf).
 
 version: "3.9"
 
@@ -43,30 +43,29 @@ services:
       DATABASE_URL: postgres://panorama:TROQUE_ESTA_SENHA@panorama_postgres:5432/panorama
       REDIS_URL: redis://panorama_redis:6379
       NODE_ENV: production
-      # Lidos automaticamente pelo nginx-proxy / acme-companion do Ticketz:
-      VIRTUAL_HOST: painel.panoramahc.com.br
-      VIRTUAL_PORT: "3000"
-      LETSENCRYPT_HOST: painel.panoramahc.com.br
-      LETSENCRYPT_EMAIL: jarie@grupoepanorama.com.br
     depends_on:
       - panorama_postgres
       - panorama_redis
     networks:
       - panorama_net
-      - nginx_proxy_net
+    # Sem "ports" e sem VIRTUAL_HOST — só é alcançável de dentro da panorama_net,
+    # pelo container panorama_frontend (via seu Nginx interno).
 
-  # panorama_frontend:
-  #   Descomentar quando o frontend React (Fase 3 do roadmap) estiver pronto.
-  #   Até lá, subir só postgres + redis + api não dá erro nem falta nada.
-  #   Quando existir, provavelmente vai precisar de um subdomínio próprio
-  #   (ex.: app.grupoepanorama.com.br) com seu próprio VIRTUAL_HOST/LETSENCRYPT_HOST,
-  #   já que o painel.panoramahc.com.br desta API ficará ocupado pela API.
-  #   build: ./frontend
-  #   container_name: panorama_frontend
-  #   restart: unless-stopped
-  #   networks:
-  #     - panorama_net
-  #     - nginx_proxy_net
+  panorama_frontend:
+    build: ./frontend
+    container_name: panorama_frontend
+    restart: unless-stopped
+    environment:
+      # Lidos automaticamente pelo nginx-proxy / acme-companion do Ticketz:
+      VIRTUAL_HOST: painel.panoramahc.com.br
+      VIRTUAL_PORT: "80"
+      LETSENCRYPT_HOST: painel.panoramahc.com.br
+      LETSENCRYPT_EMAIL: jarie@grupoepanorama.com.br
+    depends_on:
+      - panorama_api
+    networks:
+      - panorama_net       # para falar com panorama_api
+      - nginx_proxy_net    # para o proxy do Ticketz conseguir alcançar este container
 
 networks:
   panorama_net:

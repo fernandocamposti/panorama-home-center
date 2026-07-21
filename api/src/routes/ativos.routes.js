@@ -5,18 +5,39 @@ const { exigirUsuario } = require("../auth");
 module.exports = async function ativosRoutes(fastify) {
   fastify.addHook("preHandler", exigirUsuario);
 
-  fastify.get("/api/ativos", async (request) => {
-    const { tipo, filial_id, status } = request.query || {};
+  fastify.get("/api/ativos", async (request, reply) => {
+    const { tipo, filial_id, status, order, limit } = request.query || {};
     const condicoes = [];
     const valores = [];
 
-    if (tipo) { valores.push(tipo); condicoes.push(`tipo = $${valores.length}`); }
-    if (filial_id) { valores.push(filial_id); condicoes.push(`filial_id = $${valores.length}`); }
-    if (status) { valores.push(status); condicoes.push(`status = $${valores.length}`); }
+    if (tipo) { valores.push(tipo); condicoes.push(`a.tipo = $${valores.length}`); }
+    if (filial_id) { valores.push(filial_id); condicoes.push(`a.filial_id = $${valores.length}`); }
+    if (status) { valores.push(status); condicoes.push(`a.status = $${valores.length}`); }
 
     const where = condicoes.length ? `WHERE ${condicoes.join(" AND ")}` : "";
+
+    // order=recentes -> para a tabela "Últimos Computadores" do dashboard.
+    const orderBy = order === "recentes" ? "a.criado_em DESC" : "a.nome ASC";
+
+    let limitNum = 100;
+    if (limit != null) {
+      limitNum = Number(limit);
+      if (!Number.isFinite(limitNum) || limitNum <= 0) {
+        return reply.code(400).send({ erro: "limit inválido" });
+      }
+    }
+    limitNum = Math.min(limitNum, 200);
+    valores.push(limitNum);
+
     const { rows } = await pool.query(
-      `SELECT * FROM ativos ${where} ORDER BY nome`,
+      `SELECT a.*, f.nome AS filial_nome, d.nome AS departamento_nome, g.ultimo_checkin
+       FROM ativos a
+       LEFT JOIN filiais f ON f.id = a.filial_id
+       LEFT JOIN departamentos d ON d.id = a.departamento_id
+       LEFT JOIN agentes g ON g.ativo_id = a.id
+       ${where}
+       ORDER BY ${orderBy}
+       LIMIT $${valores.length}`,
       valores
     );
     return rows;

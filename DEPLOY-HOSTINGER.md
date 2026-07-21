@@ -1,127 +1,73 @@
-# Deploy na Hostinger — passo a passo
+# Deploy na Hostinger — status e próximos passos
 
-Sua situação real (confirmada via diagnóstico na VPS `srv904964`): Docker
-com o Ticketz (variante do Whaticket) rodando via `nginx-proxy` +
-`acme-companion` — dois containers que expõem tudo ao público nas portas
-80/443 e emitem certificado SSL automaticamente, lendo variáveis de ambiente
-dos outros containers. Rede desse proxy: `ticketz-docker-acme_nginx-proxy`.
+## Status atual ✅
 
-Isso simplifica o deploy: **não precisa editar Nginx nem rodar certbot à
-mão** — só colocar o `panorama_api` na mesma rede e definir duas variáveis
-de ambiente, que já estão configuradas no `docker-compose.panorama.yml`
-para o domínio `painel.panoramahc.com.br`.
+- Backend (API) em produção, isolado do Ticketz, rodando em `/opt/panorama` na VPS `srv904964`.
+- Repositório: `github.com/fernandocamposti/panorama-home-center` (público).
+- Banco migrado, usuário admin (`suporteti@panorama.com.br`) criado.
+- Domínio `painel.panoramahc.com.br` com SSL automático via `nginx-proxy` +
+  `acme-companion` (os mesmos containers que já cuidam do Ticketz em
+  `pchat.panoramahc.com.br` — cada domínio com seu próprio certificado, sem
+  interferência entre eles).
 
-Repositório já criado e no ar: `github.com/fernandocamposti/panorama-home-center`.
+## O que muda agora (Fase 3 — frontend)
 
----
+Até aqui, `painel.panoramahc.com.br` só respondia às rotas JSON da API
+(`/health`, `/api/*`). Agora existe um frontend React (pasta `frontend/`)
+que vira a tela de verdade do painel.
 
-## Parte A — já feita ✅
+Mudança de arquitetura: quem passa a ficar exposto ao público é o
+**panorama_frontend** (Nginx servindo o React + fazendo proxy interno para
+a API). O `panorama_api` sai da rede do proxy do Ticketz e fica 100%
+isolado, só acessível pelo `panorama_frontend` dentro da rede interna
+(`panorama_net`). Isso é mais seguro: só um ponto de entrada público em vez
+de dois.
 
-Repositório criado no GitHub e código enviado.
-
----
-
-## Parte B — na VPS (via SSH)
-
-### B.1 Apontar o DNS
-
-⚠️ `pchat.panoramahc.com.br` já é usado pelo Ticketz — NÃO reaproveitar esse
-subdomínio. Crie um registro **A** novo: host `painel` → `31.97.82.10`
-(mesma VPS, subdomínio diferente: `painel.panoramahc.com.br`).
-
-Confirme que esse é o IP público desta VPS antes de seguir:
+### Passo a passo na VPS
 
 ```bash
-curl -4 ifconfig.me
-```
-
-Se a propagação do DNS ainda estiver recente, pode levar alguns minutos até
-funcionar globalmente — sem problema, o resto do deploy não depende disso.
-
-### B.2 Clonar o repositório
-
-```bash
-cd /opt
-git clone https://github.com/fernandocamposti/panorama-home-center.git panorama
-cd panorama
-```
-
-(Repositório é privado — vai pedir usuário + token do GitHub, o mesmo token
-que você já usou no seu Mac.)
-
-### B.3 Configurar variáveis de ambiente
-
-```bash
-cd api
-cp .env.example .env
-nano .env
-```
-
-Edite:
-- `DATABASE_URL` → troque `TROQUE_ESTA_SENHA` pela senha que você vai usar
-  no `docker-compose.panorama.yml` (próximo passo — use a mesma nos dois lugares).
-- `JWT_SECRET` → gere uma string aleatória: `openssl rand -hex 32`
-
-```bash
-cd ..
-nano docker-compose.panorama.yml
-```
-
-Troque as duas ocorrências de `TROQUE_ESTA_SENHA` (uma em `panorama_postgres`,
-outra em `DATABASE_URL` de `panorama_api`) pela mesma senha.
-
-### B.4 Subir os containers
-
-```bash
+cd /opt/panorama
+git pull
 docker compose -f docker-compose.panorama.yml up -d --build
 docker compose -f docker-compose.panorama.yml ps
 ```
 
-Deve aparecer `panorama_postgres`, `panorama_redis` e `panorama_api` como
-`running`/`Up`. Se `panorama_api` reiniciar em loop:
+Deve aparecer `panorama_postgres`, `panorama_redis`, `panorama_api` e
+`panorama_frontend`, todos `Up`.
+
+Confere que o `panorama_api` **não** está mais na rede do proxy (voltou a
+ficar só na `panorama_net`), e que quem está lá agora é o `panorama_frontend`:
 
 ```bash
-docker compose -f docker-compose.panorama.yml logs -f panorama_api
+docker inspect panorama_api --format '{{json .NetworkSettings.Networks}}' | python3 -m json.tool
+docker inspect panorama_frontend --format '{{json .NetworkSettings.Networks}}' | python3 -m json.tool
 ```
 
-### B.5 Rodar a migração e criar o admin
-
-```bash
-docker compose -f docker-compose.panorama.yml exec panorama_api node scripts/migrate.js
-docker compose -f docker-compose.panorama.yml exec panorama_api node scripts/create-admin.js "Seu Nome" seu@email.com "senha-forte-aqui"
-```
-
-### B.6 Esperar o certificado SSL
-
-O `acme-companion` detecta o `panorama_api` (pela variável `LETSENCRYPT_HOST`)
-e emite o certificado sozinho, em até 1-2 minutos. Acompanhar:
+Acompanha a emissão do certificado para o novo container (mesmo domínio de
+antes, então deve ser rápido — só troca qual container recebe o tráfego):
 
 ```bash
 docker logs -f ticketz-acme-companion
 ```
 
-(Ctrl+C para sair depois de ver algo como "Certificate obtained" para
-`painel.panoramahc.com.br`.)
-
-### B.7 Teste final, pelo domínio público
+Ctrl+C ao ver algo sobre `painel.panoramahc.com.br`. Teste final:
 
 ```bash
+curl -I https://painel.panoramahc.com.br
 curl https://painel.panoramahc.com.br/health
-# esperado: {"status":"ok"}
 
-curl -X POST https://painel.panoramahc.com.br/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"seu@email.com","senha":"senha-forte-aqui"}'
+# e o Ticketz, para garantir que nada mudou por lá:
+curl -I https://pchat.panoramahc.com.br
 ```
 
-Se o login retornar um `token`, o backend está no ar em produção.
+Depois disso, abra `https://painel.panoramahc.com.br` no navegador — deve
+aparecer a tela de login. Entre com `suporteti@panorama.com.br` e a senha
+que você definiu.
 
 ---
 
-## Depois disso
+## Referência rápida
 
 - **Atualizar o código no futuro**: `git pull && docker compose -f docker-compose.panorama.yml up -d --build`
 - **Backup do banco**: `docker compose -f docker-compose.panorama.yml exec panorama_postgres pg_dump -U panorama panorama > backup.sql`
-- **Próxima fase**: cadastrar a primeira filial/ativo de teste e instalar o
-  agente (`agente-exemplo.js`) numa máquina real apontando para
-  `https://painel.panoramahc.com.br/api`.
+- **Próxima fase**: instalar o agente (`agente-exemplo.js`) numa máquina real, gerando o token pela tela de ativos do painel (endpoint `/api/ativos/:id/enroll`).

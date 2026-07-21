@@ -65,4 +65,40 @@ module.exports = async function dashboardRoutes(fastify) {
     `);
     return rows;
   });
+
+  // Donut "Status de Sistemas" — distribuição de ativos por SO.
+  // SO nulo (dispositivos de rede, impressoras etc. sem agente) entra como "Outros".
+  // Offline entra como categoria própria, igual no dashboard original.
+  fastify.get("/api/dashboard/por-so", async () => {
+    // Repete a expressão CASE inteira no GROUP BY (em vez de agrupar pelo
+    // alias "categoria") — mais portável entre bancos/versões de Postgres.
+    const casoCategoria = `
+      CASE
+        WHEN status = 'offline' THEN 'Offline'
+        WHEN so ILIKE 'windows%' THEN 'Windows'
+        WHEN so ILIKE 'linux%' THEN 'Linux'
+        ELSE 'Outros'
+      END
+    `;
+    const { rows } = await pool.query(`
+      SELECT ${casoCategoria} AS categoria, COUNT(*) AS total
+      FROM ativos
+      GROUP BY ${casoCategoria}
+      ORDER BY total DESC
+    `);
+    return rows;
+  });
+
+  // "Top Departamentos por Equipamentos"
+  fastify.get("/api/dashboard/top-departamentos", async () => {
+    const { rows } = await pool.query(`
+      SELECT d.id, d.nome, COUNT(a.id) AS total
+      FROM departamentos d
+      LEFT JOIN ativos a ON a.departamento_id = d.id
+      GROUP BY d.id, d.nome
+      ORDER BY total DESC
+      LIMIT 10
+    `);
+    return rows;
+  });
 };
