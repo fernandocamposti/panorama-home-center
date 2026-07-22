@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, getUsuario } from "../api";
 
 const TIPOS = [
   { valor: "computador", label: "Computador" },
@@ -10,7 +10,7 @@ const TIPOS = [
   { valor: "monitor", label: "Monitor" },
 ];
 
-function LinhaOrganizar({ ativo, filiais, onSalvar }) {
+function LinhaOrganizar({ ativo, filiais, podeExcluir, onSalvar, onExcluir }) {
   const [nome, setNome] = useState(ativo.nome);
   const [tipo, setTipo] = useState(ativo.tipo || "computador");
   const [filialId, setFilialId] = useState("");
@@ -18,6 +18,16 @@ function LinhaOrganizar({ ativo, filiais, onSalvar }) {
   const [departamentoId, setDepartamentoId] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+
+  async function excluir() {
+    if (!confirm(`Excluir "${ativo.nome}"? Essa ação não pode ser desfeita.`)) return;
+    try {
+      await api.excluirAtivo(ativo.id);
+      onExcluir();
+    } catch (e) {
+      alert(e.message || "Falha ao excluir");
+    }
+  }
 
   useEffect(() => {
     if (!filialId) {
@@ -94,13 +104,24 @@ function LinhaOrganizar({ ativo, filiais, onSalvar }) {
         </select>
       </td>
       <td className="py-2">
-        <button
-          onClick={salvar}
-          disabled={salvando}
-          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition"
-        >
-          {salvando ? "Salvando..." : "Salvar"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={salvar}
+            disabled={salvando}
+            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition"
+          >
+            {salvando ? "Salvando..." : "Salvar"}
+          </button>
+          {podeExcluir && (
+            <button
+              onClick={excluir}
+              className="text-xs text-red-400 hover:text-red-300 px-2"
+              title="Excluir este dispositivo"
+            >
+              Excluir
+            </button>
+          )}
+        </div>
         {erro && <div className="text-[11px] text-red-400 mt-1">{erro}</div>}
       </td>
     </tr>
@@ -111,6 +132,7 @@ export default function PendingDevices() {
   const [dispositivos, setDispositivos] = useState([]);
   const [filiais, setFiliais] = useState([]);
   const [carregando, setCarregando] = useState(true);
+  const podeExcluir = getUsuario()?.perfil === "admin";
 
   const carregar = async () => {
     setCarregando(true);
@@ -152,7 +174,14 @@ export default function PendingDevices() {
         </thead>
         <tbody>
           {dispositivos.map((ativo) => (
-            <LinhaOrganizar key={ativo.id} ativo={ativo} filiais={filiais} onSalvar={carregar} />
+            <LinhaOrganizar
+              key={ativo.id}
+              ativo={ativo}
+              filiais={filiais}
+              podeExcluir={podeExcluir}
+              onSalvar={carregar}
+              onExcluir={carregar}
+            />
           ))}
         </tbody>
       </table>
