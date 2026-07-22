@@ -27,7 +27,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
-const { execFileSync, spawn } = require("child_process");
+const { execFileSync } = require("child_process");
 const si = require("systeminformation");
 
 const TASK_NAME = "PanoramaAgent";
@@ -54,11 +54,17 @@ function salvarJson(caminho, dados) {
   fs.writeFileSync(caminho, JSON.stringify(dados, null, 2));
 }
 
-// No Windows compilado, garante que o agente rode sempre de um lugar fixo
-// (C:\ProgramData\PanoramaAgent), mesmo que a pessoa tenha dado o duplo
-// clique num .exe solto na área de trabalho ou nos Downloads. Assim a
-// tarefa agendada aponta pra um caminho que não some se o arquivo original
-// for apagado/movido depois.
+// No Windows compilado, copia o .exe para um lugar fixo
+// (C:\ProgramData\PanoramaAgent) para sobreviver caso o arquivo original
+// (ex.: em Downloads) seja apagado ou movido depois. Diferente da versão
+// anterior, NÃO relança um processo filho nem encerra o processo atual —
+// ele copia e segue rodando dali mesmo, no mesmo processo. Isso evita o
+// padrão "copia a si mesmo + relança + encerra", que é justamente o que
+// antivírus (Windows Defender e outros) tendem a marcar como
+// comportamento de dropper/malware e apagar/bloquear silenciosamente —
+// foi o que aconteceu nos testes: o processo original encerrava antes do
+// auto-cadastro rodar, e o antivírus removia a cópia antes dela conseguir
+// rodar sozinha.
 function garantirInstalado(dirAtual) {
   if (process.platform !== "win32" || !process.pkg) {
     return dirAtual; // Linux ou rodando via "node" direto: usa a pasta atual mesmo
@@ -73,12 +79,12 @@ function garantirInstalado(dirAtual) {
   try {
     fs.mkdirSync(PASTA_INSTALACAO_WINDOWS, { recursive: true });
     fs.copyFileSync(process.execPath, exeAlvo);
-    console.log(`[agente] Instalando em ${PASTA_INSTALACAO_WINDOWS}...`);
-    const filho = spawn(exeAlvo, [], { detached: true, stdio: "ignore", cwd: PASTA_INSTALACAO_WINDOWS });
-    filho.unref();
-    process.exit(0);
+    console.log(
+      `[agente] Copiado para ${PASTA_INSTALACAO_WINDOWS} (para sobreviver se este arquivo for apagado depois). Continuando a rodar a partir daqui.`
+    );
+    return PASTA_INSTALACAO_WINDOWS;
   } catch (e) {
-    console.warn(`[agente] Não consegui me instalar em ${PASTA_INSTALACAO_WINDOWS} (${e.message}). Vou continuar rodando direto daqui.`);
+    console.warn(`[agente] Não consegui copiar para ${PASTA_INSTALACAO_WINDOWS} (${e.message}). Vou continuar rodando direto daqui.`);
     return dirAtual;
   }
 }
@@ -122,6 +128,7 @@ async function resolverConfig() {
       apiUrl: process.env.PANORAMA_API_URL || configClassico.apiUrl || API_URL_PADRAO,
       token: tokenClassico,
       intervalMs: Number(process.env.PANORAMA_INTERVAL_MS || configClassico.intervalMs || 60000),
+      exePersistente: process.execPath,
     };
   }
 
@@ -145,10 +152,19 @@ async function resolverConfig() {
     );
   }
 
+  // A tarefa agendada deve apontar para a cópia fixa em ProgramData quando
+  // ela existir (sobrevive se o .exe baixado for apagado); só cai para
+  // process.execPath se a cópia não foi possível (ex.: sem permissão).
+  const exePersistente =
+    process.platform === "win32" && process.pkg
+      ? path.join(dirInstalacao, "panorama-agent.exe")
+      : process.execPath;
+
   return {
     apiUrl,
     token: estado.token,
     intervalMs: Number(process.env.PANORAMA_INTERVAL_MS || estado.intervalMs || 60000),
+    exePersistente,
   };
 }
 
@@ -156,7 +172,7 @@ async function resolverConfig() {
 // para iniciar com o sistema — assim a pessoa só precisa dar 2 cliques (ou
 // "Executar como Administrador") UMA vez; nas próximas vezes o Windows já
 // inicia o agente automaticamente, sem precisar rodar nada manualmente.
-function garantirInicioAutomatico() {
+function garantirInicioAutomatico(exePath) {
   if (process.platform !== "win32" || !process.pkg) return;
 
   try {
@@ -165,8 +181,6 @@ function garantirInicioAutomatico() {
   } catch {
     // ainda não existe — tenta criar abaixo
   }
-
-  const exePath = process.execPath;
 
   try {
     // Precisa ser Administrador: roda mesmo sem ninguém logado, reinicia com a máquina.
@@ -259,7 +273,7 @@ async function cicloDeChekin(config) {
 async function iniciar() {
   const config = await resolverConfig();
 
-  garantirInicioAutomatico();
+  garantirInicioAutomatico(config.exePersistente);
 
   console.log(`[agente] Iniciando — enviando para ${config.apiUrl} a cada ${config.intervalMs / 1000}s`);
   await cicloDeChekin(config);
