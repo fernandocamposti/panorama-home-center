@@ -8,6 +8,7 @@ import SoDonut from "./SoDonut.jsx";
 import AlertsList from "./AlertsList.jsx";
 import RecentAssetsTable from "./RecentAssetsTable.jsx";
 import TopDepartments from "./TopDepartments.jsx";
+import PendingDevices from "./PendingDevices.jsx";
 
 const TIPO_LABEL = {
   computador: "Computadores",
@@ -83,6 +84,8 @@ export default function Dashboard({ onLogout }) {
           ) : (
             resumo && (
               <>
+                <PendingDevices />
+
                 <div className="flex flex-wrap gap-4">
                   {cardsBase.map((tipo) => {
                     const t = porTipoMap[tipo];

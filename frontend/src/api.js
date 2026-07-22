@@ -44,4 +44,9 @@ export const api = {
   alertasRecentes: () => request("/api/dashboard/alertas-recentes"),
   topDepartamentos: () => request("/api/dashboard/top-departamentos"),
   ultimosAtivos: (limit = 5) => request(`/api/ativos?order=recentes&limit=${limit}`),
+  naoOrganizados: () => request("/api/ativos?nao_organizado=1&limit=200"),
+  filiais: () => request("/api/filiais"),
+  departamentos: (filialId) => request(`/api/departamentos?filial_id=${filialId}`),
+  organizarAtivo: (id, dados) =>
+    request(`/api/ativos/${id}`, { method: "PATCH", body: JSON.stringify(dados) }),
 };

@@ -1,22 +1,9 @@
 # Agente Panorama — guia rápido
 
 Agente que roda em cada computador/servidor e envia métricas para a API do
-painel. Lê configuração de `config.json` (na mesma pasta do executável) ou
-de variáveis de ambiente.
+painel.
 
-## Cadastrar uma máquina nova (1 comando)
-
-Na VPS (ou qualquer máquina com `curl`+`python3`):
-
-```bash
-./cadastrar-ativo.sh computador "PC-FINANCEIRO-05" "Matriz" "Financeiro"
-```
-
-Isso cadastra o ativo no painel (reaproveita filial/departamento se já
-existirem) e gera um arquivo pronto em `pacotes-agente/config-NOME.json`
-com o token já preenchido.
-
-## Instalar o agente — Windows, via .exe (só executar, sem comandos)
+## Instalar numa máquina Windows (só o .exe, nada mais)
 
 **Passo único, na VPS** (fazer uma vez, ou de novo sempre que
 `agente-exemplo.js` mudar):
@@ -25,48 +12,65 @@ com o token já preenchido.
 ./scripts/build-agent-exe.sh
 ```
 
-Isso compila `panorama-agent.exe` e deixa disponível em
+Isso compila `panorama-agent.exe` (já com a chave de instalação do seu
+painel embutida) e deixa disponível em
 `https://painel.panoramahc.com.br/agente-download/panorama-agent.exe`.
 
-**Depois, para instalar em cada máquina Windows, sem rodar nenhum comando
-nela:**
+**Na máquina Windows: baixe o `panorama-agent.exe` e dê 1 clique com o
+botão direito > "Executar como Administrador" (só na primeira vez).**
+Nada de pasta, nada de config.json, nada de comando.
 
-1. Baixe `panorama-agent.exe`.
-2. Pegue o `pacotes-agente/config-NOME.json` gerado pelo cadastro e
-   renomeie para `config.json`.
-3. Coloque os dois arquivos (`panorama-agent.exe` + `config.json`) na
-   mesma pasta na máquina de destino (pen drive, rede, e-mail — o meio não
-   importa).
-4. Dê 1 clique com o botão direito no `.exe` > **Executar como
-   Administrador** (só na primeira vez).
+O agente sozinho:
+1. Se copia para `C:\ProgramData\PanoramaAgent` (pasta fixa, para
+   sobreviver mesmo se você apagar o `.exe` que baixou).
+2. Se cadastra automaticamente no painel.
+3. Se registra para iniciar com o Windows (sobrevive a reinício).
+4. Começa a mandar métricas na hora.
 
-Pronto. O agente já começa a mandar dados na hora e, sozinho, se registra
-para iniciar automaticamente com o Windows — não precisa rodar mais nada
-depois disso, mesmo que a máquina reinicie. Para a próxima máquina, é só
-repetir o passo 1 acima (cadastro) e os passos 1–4 (copiar e clicar).
+Ele aparece no painel como **"não organizado"** — dá pra ver e organizar
+(nome, tipo, filial, departamento) direto em
+`https://painel.panoramahc.com.br`, num aviso amarelo no topo do
+dashboard. Não precisa saber o nome/filial da máquina antes de instalar.
 
 > Se não der para "Executar como Administrador" na primeira vez, o agente
 > ainda funciona (fica rodando enquanto a janela ficar aberta) e avisa na
 > tela que não conseguiu se registrar para iniciar sozinho — nesse caso,
 > repita o clique como Administrador quando puder.
 
+> **Nota de verificação**: o auto-cadastro, a auto-instalação e o build do
+> `.exe` foram revisados e testados com um servidor mock (simulando a API)
+> neste ambiente, mas não puderam ser executados ponta a ponta numa
+> máquina Windows real. Teste na primeira máquina e confira se ela aparece
+> no painel (em "não organizado" ou já com métricas) depois de alguns
+> minutos.
+
+## Alternativa: pré-cadastrar com nome/filial definidos
+
+Útil quando você já sabe de antemão o nome/filial da máquina (ex.: vai
+preparar várias de uma vez) e prefere não organizar depois pelo painel.
+
+Na VPS (ou qualquer máquina com `curl`+`python3`):
+
+```bash
+./cadastrar-ativo.sh computador "PC-FINANCEIRO-05" "Matriz" "Financeiro"
+```
+
+Isso cadastra o ativo no painel e gera um arquivo pronto em
+`pacotes-agente/config-NOME.json` com o token já preenchido. Renomeie para
+`config.json`, coloque na mesma pasta do `panorama-agent.exe` na máquina de
+destino, e rode o `.exe` — ele detecta o `config.json` e usa aquele
+cadastro específico em vez de se auto-cadastrar.
+
 ## Alternativa: instalador PowerShell (`instalar.ps1`)
 
-Só é necessário se você já tem o `.exe` mas não tem como copiar um
-`config.json` junto (ex.: instalação remota via um único link). Baixa o
-`.exe`, grava a configuração a partir do `-Token` informado e testa antes
-de registrar a tarefa:
+Baixa o `.exe`, grava a configuração a partir de um `-Token` já gerado via
+`cadastrar-ativo.sh` e testa antes de registrar a tarefa — útil para
+instalação remota via um único link, sem precisar copiar dois arquivos:
 
 ```powershell
 irm https://raw.githubusercontent.com/fernandocamposti/panorama-home-center/main/instalar.ps1 -OutFile instalar.ps1
 .\instalar.ps1 -Token "TOKEN_GERADO_NO_CADASTRO"
 ```
-
-> **Nota de verificação**: o build do `.exe`, a auto-instalação embutida
-> nele e o `instalar.ps1` foram revisados com cuidado, mas não puderam ser
-> executados ponta a ponta neste ambiente (sem acesso a uma máquina
-> Windows real para testar). Teste na primeira máquina e confira se o
-> agente aparece "online" no painel depois de alguns minutos.
 
 ## Instalar o agente — Windows, com Node.js (alternativa já testada ponta a ponta)
 
