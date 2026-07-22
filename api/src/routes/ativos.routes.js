@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const { pool } = require("../db");
-const { exigirUsuario } = require("../auth");
+const { exigirUsuario, exigirAdmin } = require("../auth");
 
 module.exports = async function ativosRoutes(fastify) {
   fastify.addHook("preHandler", exigirUsuario);
@@ -87,6 +87,17 @@ module.exports = async function ativosRoutes(fastify) {
       return reply.code(404).send({ erro: "Ativo não encontrado" });
     }
     return rows[0];
+  });
+
+  // Exclui um ativo (ex.: máquina desativada/trocada). Restrito a admin
+  // porque é destrutivo e apaga métricas/alertas em cascata.
+  fastify.delete("/api/ativos/:id", { preHandler: exigirAdmin }, async (request, reply) => {
+    const { id } = request.params;
+    const { rowCount } = await pool.query("DELETE FROM ativos WHERE id = $1", [id]);
+    if (rowCount === 0) {
+      return reply.code(404).send({ erro: "Ativo não encontrado" });
+    }
+    return reply.code(204).send();
   });
 
   // Gera (ou regenera) o token do agente para este ativo — usado no

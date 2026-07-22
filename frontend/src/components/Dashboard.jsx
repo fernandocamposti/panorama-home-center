@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { api, clearToken } from "../api";
+import { api, clearSessao } from "../api";
 import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
 import StatCard from "./StatCard.jsx";
@@ -10,6 +10,12 @@ import RecentAssetsTable from "./RecentAssetsTable.jsx";
 import TopDepartments from "./TopDepartments.jsx";
 import PendingDevices from "./PendingDevices.jsx";
 import AgentsPage from "./AgentsPage.jsx";
+import AtivosPage from "./AtivosPage.jsx";
+import FiliaisPage from "./FiliaisPage.jsx";
+import DepartamentosPage from "./DepartamentosPage.jsx";
+import UsuariosPage from "./UsuariosPage.jsx";
+import AlertasPage from "./AlertasPage.jsx";
+import ComingSoon from "./ComingSoon.jsx";
 
 const TIPO_LABEL = {
   computador: "Computadores",
@@ -19,6 +25,75 @@ const TIPO_LABEL = {
   telefone: "Telefones IP",
   monitor: "Monitores",
 };
+
+const TITULOS_PAGINA = {
+  dashboard: "Dashboard",
+  agents: "Agents",
+  inventario: "Inventário",
+  filiais: "Filiais",
+  departamentos: "Departamentos",
+  usuarios: "Usuários",
+  alertas: "Alertas",
+  software: "Software",
+  hardware: "Hardware",
+  politicas: "Políticas",
+  "perfil-empresa": "Perfil da Empresa",
+};
+
+function tituloDaPagina(pagina) {
+  if (pagina.startsWith("ativos:")) return TIPO_LABEL[pagina.split(":")[1]] || "Ativos";
+  return TITULOS_PAGINA[pagina] || "Dashboard";
+}
+
+function renderPagina(pagina) {
+  if (pagina.startsWith("ativos:")) {
+    return <AtivosPage tipo={pagina.split(":")[1]} />;
+  }
+  switch (pagina) {
+    case "agents":
+      return <AgentsPage />;
+    case "inventario":
+      return <AtivosPage />;
+    case "filiais":
+      return <FiliaisPage />;
+    case "departamentos":
+      return <DepartamentosPage />;
+    case "usuarios":
+      return <UsuariosPage />;
+    case "alertas":
+      return <AlertasPage />;
+    case "software":
+      return (
+        <ComingSoon
+          titulo="Inventário de Software"
+          descricao='Em breve. O agente ainda não coleta a lista de programas instalados em cada máquina — a tabela já existe no banco ("inventario_software"), falta o agente enviar isso no checkin e esta tela consumir.'
+        />
+      );
+    case "hardware":
+      return (
+        <ComingSoon
+          titulo="Inventário de Hardware"
+          descricao="Em breve. O agente já coleta fabricante, modelo, memória e disco a cada checkin, mas a API ainda não guarda esses detalhes (só CPU/memória/disco em %) nem existe uma tela para exibi-los — é o próximo passo natural do roadmap."
+        />
+      );
+    case "politicas":
+      return (
+        <ComingSoon
+          titulo="Políticas de Alerta"
+          descricao="Em breve. Hoje os limites de alerta (ex.: CPU/memória/disco acima de 90%) são fixos no código da API. Essa tela vai permitir configurar esses limites por filial ou tipo de ativo sem precisar mexer no código."
+        />
+      );
+    case "perfil-empresa":
+      return (
+        <ComingSoon
+          titulo="Perfil da Empresa"
+          descricao="Em breve. Tela para configurar dados da empresa (nome, logo, domínio do painel etc.) — ainda não existe um cadastro para isso no banco."
+        />
+      );
+    default:
+      return null;
+  }
+}
 
 export default function Dashboard({ onLogout }) {
   const [pagina, setPagina] = useState("dashboard");
@@ -60,7 +135,7 @@ export default function Dashboard({ onLogout }) {
   }, [carregar, pagina]);
 
   function handleLogout() {
-    clearToken();
+    clearSessao();
     onLogout();
   }
 
@@ -73,16 +148,14 @@ export default function Dashboard({ onLogout }) {
 
       <div className="flex-1 min-w-0">
         <Topbar
-          titulo={pagina === "agents" ? "Agents" : "Dashboard"}
+          titulo={tituloDaPagina(pagina)}
           onRefresh={pagina === "dashboard" ? carregar : undefined}
           onLogout={handleLogout}
           atualizadoEm={pagina === "dashboard" ? atualizadoEm : ""}
         />
 
         <main className="p-6 space-y-6">
-          {pagina === "agents" ? (
-            <AgentsPage />
-          ) : (
+          {pagina === "dashboard" ? (
             <>
               {erro && (
                 <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg px-4 py-3">
@@ -137,6 +210,8 @@ export default function Dashboard({ onLogout }) {
                 )
               )}
             </>
+          ) : (
+            renderPagina(pagina)
           )}
         </main>
       </div>

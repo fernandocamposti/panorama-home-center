@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, setToken } from "../api";
+import { api, setToken, setUsuario } from "../api";
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -14,6 +14,7 @@ export default function Login({ onLogin }) {
     try {
       const data = await api.login(email, senha);
       setToken(data.token);
+      setUsuario(data.usuario);
       onLogin();
     } catch (err) {
       setErro(err.message || "Falha ao entrar");

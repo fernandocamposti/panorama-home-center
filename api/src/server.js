@@ -29,6 +29,8 @@ async function main() {
   await fastify.register(require("./routes/ativos.routes"));
   await fastify.register(require("./routes/agents.routes"));
   await fastify.register(require("./routes/dashboard.routes"));
+  await fastify.register(require("./routes/usuarios.routes"));
+  await fastify.register(require("./routes/alertas.routes"));
 
   const porta = Number(process.env.PORT || 3000);
   await fastify.listen({ port: porta, host: "0.0.0.0" });
