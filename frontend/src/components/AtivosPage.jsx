@@ -22,8 +22,61 @@ const TITULOS = {
 const campoCls =
   "bg-panelalt border border-panelborder rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:border-blue-500";
 
+// "312045" -> "3d 14h 40m" — uptime só faz sentido pra quem tem agente
+// (computador/servidor); pra dispositivos sem agente vem null.
+function formatarUptime(segundos) {
+  if (segundos == null) return null;
+  const dias = Math.floor(segundos / 86400);
+  const horas = Math.floor((segundos % 86400) / 3600);
+  const minutos = Math.floor((segundos % 3600) / 60);
+  const partes = [];
+  if (dias) partes.push(`${dias}d`);
+  if (horas) partes.push(`${horas}h`);
+  if (!dias && minutos) partes.push(`${minutos}m`);
+  return partes.length ? partes.join(" ") : "menos de 1m";
+}
+
+function DetalhesAtivo({ ativo, colSpan }) {
+  const campos = [
+    ["IP", ativo.ip],
+    ["Processador", ativo.processador],
+    ["Memória (RAM)", ativo.memoria_total_gb ? `${ativo.memoria_total_gb} GB` : null],
+    [
+      "Disco",
+      ativo.disco_resumo || (ativo.disco_total_gb ? `${ativo.disco_total_gb} GB (uso: ${ativo.disco_pct ?? "?"}%)` : null),
+    ],
+    ["Fabricante / Modelo", [ativo.fabricante, ativo.modelo].filter(Boolean).join(" / ") || null],
+    ["Arquitetura", ativo.arquitetura],
+    ["Ligado há", formatarUptime(ativo.uptime_s)],
+    ["Último checkin", ativo.ultimo_checkin ? new Date(ativo.ultimo_checkin).toLocaleString("pt-BR") : null],
+  ].filter(([, valor]) => valor);
+
+  return (
+    <tr className="bg-panelalt/20 border-b border-panelborder/50 last:border-0">
+      <td colSpan={colSpan} className="py-3 px-3">
+        {campos.length === 0 ? (
+          <p className="text-xs text-gray-500">
+            Ainda não tem dados de hardware desse dispositivo — só chega no primeiro checkin do agente
+            (ou não é um dispositivo com agente instalado).
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
+            {campos.map(([rotulo, valor]) => (
+              <div key={rotulo}>
+                <div className="text-[10px] tracking-wide text-gray-500">{rotulo}</div>
+                <div className="text-xs text-gray-300">{valor}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 function LinhaAtivo({ ativo, filiais, mostrarTipo, podeExcluir, onSalvo, onExcluido }) {
   const [editando, setEditando] = useState(false);
+  const [mostrarDetalhes, setMostrarDetalhes] = useState(false);
   const [nome, setNome] = useState(ativo.nome);
   const [tipo, setTipo] = useState(ativo.tipo);
   const [filialId, setFilialId] = useState(ativo.filial_id || "");
@@ -31,6 +84,7 @@ function LinhaAtivo({ ativo, filiais, mostrarTipo, podeExcluir, onSalvo, onExclu
   const [departamentoId, setDepartamentoId] = useState(ativo.departamento_id || "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const colSpan = mostrarTipo ? 7 : 6;
 
   useEffect(() => {
     if (!editando || !filialId) {
@@ -71,36 +125,45 @@ function LinhaAtivo({ ativo, filiais, mostrarTipo, podeExcluir, onSalvo, onExclu
 
   if (!editando) {
     return (
-      <tr className="border-b border-panelborder/50 last:border-0">
-        <td className="py-2 pr-2 text-gray-200">{ativo.nome}</td>
-        {mostrarTipo && (
-          <td className="py-2 pr-2 text-gray-400">{TIPOS.find((t) => t.valor === ativo.tipo)?.label || ativo.tipo}</td>
-        )}
-        <td className="py-2 pr-2 text-gray-400">{ativo.filial_nome || "—"}</td>
-        <td className="py-2 pr-2 text-gray-400">{ativo.departamento_nome || "—"}</td>
-        <td className="py-2 pr-2 text-gray-400">{ativo.so || "—"}</td>
-        <td className="py-2 pr-2">
-          <span
-            className={`text-[11px] rounded-full px-2 py-0.5 ${
-              ativo.status === "online" ? "bg-green-500/10 text-green-400" : "bg-gray-500/10 text-gray-500"
-            }`}
-          >
-            {ativo.status}
-          </span>
-        </td>
-        <td className="py-2">
-          <div className="flex gap-3">
-            <button onClick={() => setEditando(true)} className="text-xs text-blue-400 hover:text-blue-300">
-              Editar
-            </button>
-            {podeExcluir && (
-              <button onClick={excluir} className="text-xs text-red-400 hover:text-red-300">
-                Excluir
+      <>
+        <tr className={`border-b border-panelborder/50 last:border-0 ${mostrarDetalhes ? "border-b-0" : ""}`}>
+          <td className="py-2 pr-2 text-gray-200">{ativo.nome}</td>
+          {mostrarTipo && (
+            <td className="py-2 pr-2 text-gray-400">{TIPOS.find((t) => t.valor === ativo.tipo)?.label || ativo.tipo}</td>
+          )}
+          <td className="py-2 pr-2 text-gray-400">{ativo.filial_nome || "—"}</td>
+          <td className="py-2 pr-2 text-gray-400">{ativo.departamento_nome || "—"}</td>
+          <td className="py-2 pr-2 text-gray-400">{ativo.so || "—"}</td>
+          <td className="py-2 pr-2">
+            <span
+              className={`text-[11px] rounded-full px-2 py-0.5 ${
+                ativo.status === "online" ? "bg-green-500/10 text-green-400" : "bg-gray-500/10 text-gray-500"
+              }`}
+            >
+              {ativo.status}
+            </span>
+          </td>
+          <td className="py-2">
+            <div className="flex gap-3">
+              <button
+                onClick={() => setMostrarDetalhes((v) => !v)}
+                className="text-xs text-gray-400 hover:text-gray-200"
+              >
+                {mostrarDetalhes ? "Ocultar" : "Detalhes"}
               </button>
-            )}
-          </div>
-        </td>
-      </tr>
+              <button onClick={() => setEditando(true)} className="text-xs text-blue-400 hover:text-blue-300">
+                Editar
+              </button>
+              {podeExcluir && (
+                <button onClick={excluir} className="text-xs text-red-400 hover:text-red-300">
+                  Excluir
+                </button>
+              )}
+            </div>
+          </td>
+        </tr>
+        {mostrarDetalhes && <DetalhesAtivo ativo={ativo} colSpan={colSpan} />}
+      </>
     );
   }
 

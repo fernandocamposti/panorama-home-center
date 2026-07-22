@@ -71,7 +71,21 @@ module.exports = async function agentsRoutes(fastify) {
   });
 
   fastify.post("/api/agents/checkin", { preHandler: exigirAgente }, async (request, reply) => {
-    const { cpu_pct, mem_pct, disco_pct, so } = request.body || {};
+    const {
+      cpu_pct,
+      mem_pct,
+      disco_pct,
+      so,
+      ip,
+      processador,
+      fabricante,
+      modelo,
+      arquitetura,
+      mem_total_gb,
+      disco_total_gb,
+      disco_resumo,
+      uptime_s,
+    } = request.body || {};
     const ativoId = request.agente.ativo_id;
 
     await pool.query(
@@ -83,9 +97,35 @@ module.exports = async function agentsRoutes(fastify) {
       `UPDATE agentes SET ultimo_checkin = now() WHERE ativo_id = $1`,
       [ativoId]
     );
+    // COALESCE em tudo: se o agente não mandar um campo (versão antiga do
+    // .exe, por exemplo), mantém o que já estava salvo em vez de apagar.
     await pool.query(
-      `UPDATE ativos SET status = 'online', so = COALESCE($2, so) WHERE id = $1`,
-      [ativoId, so || null]
+      `UPDATE ativos SET
+         status = 'online',
+         so = COALESCE($2, so),
+         ip = COALESCE($3, ip),
+         processador = COALESCE($4, processador),
+         fabricante = COALESCE($5, fabricante),
+         modelo = COALESCE($6, modelo),
+         arquitetura = COALESCE($7, arquitetura),
+         memoria_total_gb = COALESCE($8, memoria_total_gb),
+         disco_total_gb = COALESCE($9, disco_total_gb),
+         disco_resumo = COALESCE($10, disco_resumo),
+         uptime_s = COALESCE($11, uptime_s)
+       WHERE id = $1`,
+      [
+        ativoId,
+        so || null,
+        ip || null,
+        processador || null,
+        fabricante || null,
+        modelo || null,
+        arquitetura || null,
+        mem_total_gb ?? null,
+        disco_total_gb ?? null,
+        disco_resumo || null,
+        uptime_s ?? null,
+      ]
     );
 
     // Regras de alerta simples (fase 4 do roadmap terá regras configuráveis).

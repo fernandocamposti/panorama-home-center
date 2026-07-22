@@ -227,17 +227,52 @@ function garantirInicioAutomatico(exePath) {
   }
 }
 
+// IP da máquina na rede local — usa o módulo nativo "os" (síncrono, sem
+// depender de resolução de DNS ou do systeminformation) e pega a primeira
+// interface IPv4 que não seja loopback/interna.
+function obterIpPrincipal() {
+  const interfaces = os.networkInterfaces();
+  for (const nome of Object.keys(interfaces)) {
+    for (const iface of interfaces[nome] || []) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+}
+
+// Resumo legível dos discos físicos (ex.: "SSD 476GB (Samsung SSD 970 EVO),
+// HDD 931GB (Seagate ...)") — diferente de disco_pct/disco_total_gb, que são
+// sobre o uso do sistema de arquivos, não o hardware em si.
+function resumirDiscos(discos) {
+  if (!discos || discos.length === 0) return null;
+  return discos
+    .map((d) => {
+      const tamanhoGb = d.size ? Math.round(d.size / 1e9) : null;
+      const tipo = d.type || "disco";
+      const nome = d.name || d.vendor || "";
+      return `${tipo}${tamanhoGb ? ` ${tamanhoGb}GB` : ""}${nome ? ` (${nome})` : ""}`.trim();
+    })
+    .join(", ");
+}
+
 // Coleta as métricas atuais da máquina (mesma chamada funciona em Windows e Linux)
 async function coletarMetricas() {
-  const [cpuLoad, mem, fsSize, osInfo, sysInfo] = await Promise.all([
+  const [cpuLoad, mem, fsSize, osInfo, sysInfo, cpuInfo, discoLayout] = await Promise.all([
     si.currentLoad(),
     si.mem(),
     si.fsSize(),
     si.osInfo(),
     si.system(),
+    si.cpu(),
+    si.diskLayout().catch(() => []), // pode falhar sem privilégio em alguns SOs — não trava o checkin por isso
   ]);
 
   const discoPrincipal = fsSize[0] || { size: 0, used: 0 };
+  const processador = cpuInfo.brand
+    ? `${cpuInfo.manufacturer ? `${cpuInfo.manufacturer} ` : ""}${cpuInfo.brand}`.trim()
+    : null;
 
   return {
     hostname: os.hostname(),
@@ -245,6 +280,9 @@ async function coletarMetricas() {
     arquitetura: osInfo.arch,
     fabricante: sysInfo.manufacturer,
     modelo: sysInfo.model,
+    ip: obterIpPrincipal(),
+    processador,
+    disco_resumo: resumirDiscos(discoLayout),
     cpu_pct: Number(cpuLoad.currentLoad.toFixed(1)),
     mem_pct: Number(((mem.active / mem.total) * 100).toFixed(1)),
     mem_total_gb: Number((mem.total / 1e9).toFixed(1)),
