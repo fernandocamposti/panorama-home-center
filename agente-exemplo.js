@@ -4,10 +4,19 @@
  * Roda em cada computador/servidor (Windows ou Linux), coleta métricas
  * básicas e envia para a API central via HTTPS a cada intervalo fixo.
  *
- * Configuração: lida de um arquivo "config.json" na MESMA pasta do
- * executável (veja config.exemplo.json). Também aceita variáveis de
- * ambiente (PANORAMA_API_URL, PANORAMA_AGENT_TOKEN, PANORAMA_INTERVAL_MS),
- * que têm prioridade sobre o arquivo — útil para testes rápidos.
+ * Dois jeitos de configurar:
+ *
+ * 1) Clássico (ainda funciona): um "config.json" com {"token": "..."} na
+ *    mesma pasta do executável, gerado por ./cadastrar-ativo.sh — útil
+ *    quando você já sabe o nome/filial da máquina de antemão.
+ *
+ * 2) Auto-cadastro (novo, padrão quando não há config.json): o próprio
+ *    .exe se cadastra sozinho no painel na primeira vez que roda, usando
+ *    uma "chave de instalação" embutida no build (ver
+ *    scripts/build-agent-exe.sh). Não precisa de nenhum arquivo nem
+ *    comando — só baixar o .exe e rodar. O dispositivo aparece no painel
+ *    como "não organizado" para você definir nome/filial/departamento
+ *    depois, em painel.panoramahc.com.br.
  *
  * Este script é o mesmo usado tanto rodando via `node agente-exemplo.js`
  * quanto compilado como executável standalone (pkg) — não precisa de
@@ -17,56 +26,130 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execFileSync } = require("child_process");
+const crypto = require("crypto");
+const { execFileSync, spawn } = require("child_process");
 const si = require("systeminformation");
 
 const TASK_NAME = "PanoramaAgent";
+const API_URL_PADRAO = "https://painel.panoramahc.com.br/api";
+const PASTA_INSTALACAO_WINDOWS = "C:\\ProgramData\\PanoramaAgent";
 
-function carregarConfig() {
-  // process.pkg só existe quando rodando dentro do executável compilado —
-  // nesse caso, usamos a pasta onde o .exe está, não uma pasta temporária interna.
-  const dirBase = process.pkg ? path.dirname(process.execPath) : __dirname;
-  const configPath = path.join(dirBase, "config.json");
+// Substituído por scripts/build-agent-exe.sh na hora de compilar o .exe —
+// é a mesma chave configurada em PANORAMA_ENROLL_KEY no servidor. Rodando
+// via "node agente-exemplo.js" direto (sem compilar), fica como placeholder
+// e só funciona se PANORAMA_ENROLL_KEY estiver nas variáveis de ambiente.
+const CHAVE_INSTALACAO_EMBUTIDA = "__PANORAMA_ENROLL_KEY__";
 
-  let arquivo = {};
-  if (fs.existsSync(configPath)) {
-    try {
-      arquivo = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    } catch (e) {
-      console.error(`[agente] Falha ao ler ${configPath}:`, e.message);
-    }
+function lerJsonSeExistir(caminho) {
+  if (!fs.existsSync(caminho)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(caminho, "utf8"));
+  } catch (e) {
+    console.error(`[agente] Falha ao ler ${caminho}:`, e.message);
+    return {};
+  }
+}
+
+function salvarJson(caminho, dados) {
+  fs.writeFileSync(caminho, JSON.stringify(dados, null, 2));
+}
+
+// No Windows compilado, garante que o agente rode sempre de um lugar fixo
+// (C:\ProgramData\PanoramaAgent), mesmo que a pessoa tenha dado o duplo
+// clique num .exe solto na área de trabalho ou nos Downloads. Assim a
+// tarefa agendada aponta pra um caminho que não some se o arquivo original
+// for apagado/movido depois.
+function garantirInstalado(dirAtual) {
+  if (process.platform !== "win32" || !process.pkg) {
+    return dirAtual; // Linux ou rodando via "node" direto: usa a pasta atual mesmo
   }
 
-  // Permite passar o token como argumento na primeira execução (ex.: um
-  // atalho "panorama-agent.exe SEU_TOKEN"). Uma vez gravado em config.json,
-  // as próximas execuções (inclusive via tarefa agendada) não precisam mais
-  // do argumento.
-  const tokenArg = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : null;
-  if (tokenArg && tokenArg !== arquivo.token) {
-    arquivo.token = tokenArg;
-    try {
-      fs.writeFileSync(configPath, JSON.stringify(arquivo, null, 2));
-      console.log(`[agente] Token gravado em ${configPath}.`);
-    } catch (e) {
-      console.error(`[agente] Não consegui gravar ${configPath}:`, e.message);
-    }
+  const exeAlvo = path.join(PASTA_INSTALACAO_WINDOWS, "panorama-agent.exe");
+
+  if (path.resolve(process.execPath).toLowerCase() === path.resolve(exeAlvo).toLowerCase()) {
+    return PASTA_INSTALACAO_WINDOWS; // já está rodando do lugar certo
+  }
+
+  try {
+    fs.mkdirSync(PASTA_INSTALACAO_WINDOWS, { recursive: true });
+    fs.copyFileSync(process.execPath, exeAlvo);
+    console.log(`[agente] Instalando em ${PASTA_INSTALACAO_WINDOWS}...`);
+    const filho = spawn(exeAlvo, [], { detached: true, stdio: "ignore", cwd: PASTA_INSTALACAO_WINDOWS });
+    filho.unref();
+    process.exit(0);
+  } catch (e) {
+    console.warn(`[agente] Não consegui me instalar em ${PASTA_INSTALACAO_WINDOWS} (${e.message}). Vou continuar rodando direto daqui.`);
+    return dirAtual;
+  }
+}
+
+async function autoCadastrar(apiUrl, chaveMaquina, hostname) {
+  const chaveInstalacao = process.env.PANORAMA_ENROLL_KEY || CHAVE_INSTALACAO_EMBUTIDA;
+  if (!chaveInstalacao || chaveInstalacao === "__PANORAMA_ENROLL_KEY__") {
+    throw new Error(
+      'Este .exe não tem uma "chave de instalação" embutida (foi rodado via "node agente-exemplo.js" sem PANORAMA_ENROLL_KEY, ou o build não passou por scripts/build-agent-exe.sh).'
+    );
+  }
+
+  const resposta = await fetch(`${apiUrl}/agents/self-enroll`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chave_instalacao: chaveInstalacao,
+      chave_maquina: chaveMaquina,
+      hostname,
+      so: `${os.type()} ${os.release()}`,
+    }),
+  });
+
+  if (!resposta.ok) {
+    throw new Error(`Auto-cadastro falhou: HTTP ${resposta.status}`);
+  }
+
+  const dados = await resposta.json();
+  return dados.token;
+}
+
+async function resolverConfig() {
+  // Caminho clássico: config.json (ou env vars) já com token pronto,
+  // na mesma pasta de onde o executável está rodando agora.
+  const dirExeAtual = process.pkg ? path.dirname(process.execPath) : __dirname;
+  const configClassico = lerJsonSeExistir(path.join(dirExeAtual, "config.json"));
+  const tokenClassico = process.env.PANORAMA_AGENT_TOKEN || configClassico.token;
+
+  if (tokenClassico) {
+    return {
+      apiUrl: process.env.PANORAMA_API_URL || configClassico.apiUrl || API_URL_PADRAO,
+      token: tokenClassico,
+      intervalMs: Number(process.env.PANORAMA_INTERVAL_MS || configClassico.intervalMs || 60000),
+    };
+  }
+
+  // Caminho novo: sem config.json, sem token — se auto-cadastra sozinho.
+  const apiUrl = process.env.PANORAMA_API_URL || API_URL_PADRAO;
+  const dirInstalacao = garantirInstalado(dirExeAtual);
+  const estadoPath = path.join(dirInstalacao, "estado.json");
+  let estado = lerJsonSeExistir(estadoPath);
+
+  if (!estado.chave_maquina) {
+    estado.chave_maquina = crypto.randomUUID();
+    salvarJson(estadoPath, estado);
+  }
+
+  if (!estado.token) {
+    console.log("[agente] Nenhum token configurado — cadastrando automaticamente no painel...");
+    estado.token = await autoCadastrar(apiUrl, estado.chave_maquina, os.hostname());
+    salvarJson(estadoPath, estado);
+    console.log(
+      `[agente] Cadastrado! Organize o nome/filial/departamento deste dispositivo em ${apiUrl.replace(/\/api$/, "")} (procure por "${os.hostname()}").`
+    );
   }
 
   return {
-    apiUrl: process.env.PANORAMA_API_URL || arquivo.apiUrl || "https://painel.panoramahc.com.br/api",
-    token: process.env.PANORAMA_AGENT_TOKEN || arquivo.token,
-    intervalMs: Number(process.env.PANORAMA_INTERVAL_MS || arquivo.intervalMs || 60000),
-    configPath,
+    apiUrl,
+    token: estado.token,
+    intervalMs: Number(process.env.PANORAMA_INTERVAL_MS || estado.intervalMs || 60000),
   };
-}
-
-const config = carregarConfig();
-
-if (!config.token) {
-  console.error(
-    `[agente] Token não configurado. Coloque um "config.json" com {"token": "...", "apiUrl": "..."} na mesma pasta do executável, ou rode "panorama-agent.exe SEU_TOKEN" uma vez. Encerrando.`
-  );
-  process.exit(1);
 }
 
 // Se estiver rodando como o .exe compilado no Windows, se registra sozinho
@@ -112,8 +195,6 @@ function garantirInicioAutomatico() {
   }
 }
 
-garantirInicioAutomatico();
-
 // Coleta as métricas atuais da máquina (mesma chamada funciona em Windows e Linux)
 async function coletarMetricas() {
   const [cpuLoad, mem, fsSize, osInfo, sysInfo] = await Promise.all([
@@ -144,7 +225,7 @@ async function coletarMetricas() {
   };
 }
 
-async function enviarCheckin(payload) {
+async function enviarCheckin(config, payload) {
   // fetch nativo do Node 18+ — sem dependência externa (node-fetch),
   // o que deixa o executável compilado (pkg) mais simples e leve.
   const resposta = await fetch(`${config.apiUrl}/agents/checkin`, {
@@ -163,10 +244,10 @@ async function enviarCheckin(payload) {
   return resposta.json();
 }
 
-async function cicloDeChekin() {
+async function cicloDeChekin(config) {
   try {
     const metricas = await coletarMetricas();
-    await enviarCheckin(metricas);
+    await enviarCheckin(config, metricas);
     console.log(`[agente] Checkin OK — CPU ${metricas.cpu_pct}% | MEM ${metricas.mem_pct}% | DISCO ${metricas.disco_pct}%`);
   } catch (erro) {
     // Em produção: guardar o payload numa fila local (arquivo/sqlite) e
@@ -175,6 +256,17 @@ async function cicloDeChekin() {
   }
 }
 
-console.log(`[agente] Iniciando — enviando para ${config.apiUrl} a cada ${config.intervalMs / 1000}s`);
-cicloDeChekin();
-setInterval(cicloDeChekin, config.intervalMs);
+async function iniciar() {
+  const config = await resolverConfig();
+
+  garantirInicioAutomatico();
+
+  console.log(`[agente] Iniciando — enviando para ${config.apiUrl} a cada ${config.intervalMs / 1000}s`);
+  await cicloDeChekin(config);
+  setInterval(() => cicloDeChekin(config), config.intervalMs);
+}
+
+iniciar().catch((erro) => {
+  console.error("[agente] Falha ao iniciar:", erro.message);
+  process.exitCode = 1;
+});

@@ -6,13 +6,16 @@ module.exports = async function ativosRoutes(fastify) {
   fastify.addHook("preHandler", exigirUsuario);
 
   fastify.get("/api/ativos", async (request, reply) => {
-    const { tipo, filial_id, status, order, limit } = request.query || {};
+    const { tipo, filial_id, status, order, limit, nao_organizado } = request.query || {};
     const condicoes = [];
     const valores = [];
 
     if (tipo) { valores.push(tipo); condicoes.push(`a.tipo = $${valores.length}`); }
     if (filial_id) { valores.push(filial_id); condicoes.push(`a.filial_id = $${valores.length}`); }
     if (status) { valores.push(status); condicoes.push(`a.status = $${valores.length}`); }
+    // Dispositivos que se auto-cadastraram via .exe e ainda não foram
+    // organizados (nome/filial/departamento) pelo painel.
+    if (nao_organizado === "1" || nao_organizado === "true") { condicoes.push(`a.filial_id IS NULL`); }
 
     const where = condicoes.length ? `WHERE ${condicoes.join(" AND ")}` : "";
 
@@ -55,6 +58,35 @@ module.exports = async function ativosRoutes(fastify) {
       [tipo, nome, filial_id, departamento_id || null, so || null]
     );
     return reply.code(201).send(rows[0]);
+  });
+
+  // Organiza um ativo (usado principalmente para dispositivos que se
+  // auto-cadastraram via .exe sem filial/departamento/nome definidos):
+  // atualiza só os campos enviados.
+  fastify.patch("/api/ativos/:id", async (request, reply) => {
+    const { id } = request.params;
+    const { nome, tipo, filial_id, departamento_id } = request.body || {};
+
+    const campos = [];
+    const valores = [];
+    if (nome !== undefined) { valores.push(nome); campos.push(`nome = $${valores.length}`); }
+    if (tipo !== undefined) { valores.push(tipo); campos.push(`tipo = $${valores.length}`); }
+    if (filial_id !== undefined) { valores.push(filial_id); campos.push(`filial_id = $${valores.length}`); }
+    if (departamento_id !== undefined) { valores.push(departamento_id); campos.push(`departamento_id = $${valores.length}`); }
+
+    if (campos.length === 0) {
+      return reply.code(400).send({ erro: "Nada para atualizar" });
+    }
+
+    valores.push(id);
+    const { rows } = await pool.query(
+      `UPDATE ativos SET ${campos.join(", ")} WHERE id = $${valores.length} RETURNING *`,
+      valores
+    );
+    if (rows.length === 0) {
+      return reply.code(404).send({ erro: "Ativo não encontrado" });
+    }
+    return rows[0];
   });
 
   // Gera (ou regenera) o token do agente para este ativo — usado no

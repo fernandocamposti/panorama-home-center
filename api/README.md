@@ -44,7 +44,9 @@ curl -X POST http://localhost:3000/api/filiais \
 | GET/POST | /api/filiais | JWT (usuário) | Listar/criar filiais |
 | GET/POST | /api/departamentos | JWT (usuário) | Listar/criar departamentos |
 | GET/POST | /api/ativos | JWT (usuário) | Listar/criar ativos (computador, servidor, etc.) |
-| POST | /api/ativos/:id/enroll | JWT (usuário) | Gera o token do agente para aquele ativo |
+| PATCH | /api/ativos/:id | JWT (usuário) | Organiza um ativo (nome/tipo/filial/departamento) — usado para os que se auto-cadastraram |
+| POST | /api/ativos/:id/enroll | JWT (usuário) | Gera o token do agente para aquele ativo (fluxo com cadastro prévio) |
+| POST | /api/agents/self-enroll | Chave de instalação (`PANORAMA_ENROLL_KEY`) | O próprio .exe se cadastra sozinho na 1a execução, sem ativo pré-criado |
 | POST | /api/agents/checkin | Token do agente | Recebe métricas do agente |
 | GET | /api/dashboard/resumo | JWT (usuário) | Contagens por tipo/filial, igual aos cards do dashboard |
 | GET | /api/dashboard/alertas-recentes | JWT (usuário) | Últimos alertas abertos |
