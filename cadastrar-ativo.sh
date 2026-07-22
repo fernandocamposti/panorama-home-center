@@ -72,11 +72,31 @@ fi
 
 AGENT_TOKEN=$(curl -s -X POST "$PANORAMA_URL/api/ativos/$ATIVO_ID/enroll" -H "$AUTH_HEADER" | json_get token)
 
+# Gera um config.json pronto, já com o token — para copiar junto com o
+# panorama-agent.exe na máquina de destino. Nome do arquivo identifica o
+# ativo, para não confundir quando cadastrar várias máquinas seguidas.
+mkdir -p pacotes-agente
+PACOTE="pacotes-agente/config-$(echo "$NOME" | tr ' /' '--').json"
+cat > "$PACOTE" << EOF
+{
+  "apiUrl": "$PANORAMA_URL/api",
+  "token": "$AGENT_TOKEN",
+  "intervalMs": 60000
+}
+EOF
+
 echo ""
 echo "Ativo \"$NOME\" cadastrado (id $ATIVO_ID)."
 echo ""
 echo "Token do agente:"
 echo "$AGENT_TOKEN"
 echo ""
-echo "Comando para instalar na máquina (Windows, PowerShell como Administrador):"
-echo "  irm https://raw.githubusercontent.com/fernandocamposti/panorama-home-center/main/instalar.ps1 -OutFile instalar.ps1; .\\instalar.ps1 -Token \"$AGENT_TOKEN\""
+echo "Arquivo pronto gerado: $PACOTE"
+echo ""
+echo "Para instalar na máquina, sem rodar nenhum comando lá:"
+echo "  1. Baixe $PANORAMA_URL/agente-download/panorama-agent.exe"
+echo "  2. Copie o .exe + $PACOTE para a mesma pasta na máquina de destino"
+echo "  3. Renomeie o config-*.json para config.json (mesma pasta do .exe)"
+echo "  4. Dê 1 clique com botão direito no .exe > 'Executar como Administrador' (só na primeira vez)"
+echo ""
+echo "Pronto — ele já começa a mandar dados e fica rodando sozinho, mesmo depois de reiniciar."

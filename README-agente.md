@@ -13,9 +13,10 @@ Na VPS (ou qualquer máquina com `curl`+`python3`):
 ```
 
 Isso cadastra o ativo no painel (reaproveita filial/departamento se já
-existirem) e imprime o comando pronto para colar na máquina Windows.
+existirem) e gera um arquivo pronto em `pacotes-agente/config-NOME.json`
+com o token já preenchido.
 
-## Instalar o agente — Windows, via .exe (recomendado, sem Node.js)
+## Instalar o agente — Windows, via .exe (só executar, sem comandos)
 
 **Passo único, na VPS** (fazer uma vez, ou de novo sempre que
 `agente-exemplo.js` mudar):
@@ -27,25 +28,45 @@ existirem) e imprime o comando pronto para colar na máquina Windows.
 Isso compila `panorama-agent.exe` e deixa disponível em
 `https://painel.panoramahc.com.br/agente-download/panorama-agent.exe`.
 
-**Depois, em cada máquina Windows** (PowerShell como Administrador):
+**Depois, para instalar em cada máquina Windows, sem rodar nenhum comando
+nela:**
+
+1. Baixe `panorama-agent.exe`.
+2. Pegue o `pacotes-agente/config-NOME.json` gerado pelo cadastro e
+   renomeie para `config.json`.
+3. Coloque os dois arquivos (`panorama-agent.exe` + `config.json`) na
+   mesma pasta na máquina de destino (pen drive, rede, e-mail — o meio não
+   importa).
+4. Dê 1 clique com o botão direito no `.exe` > **Executar como
+   Administrador** (só na primeira vez).
+
+Pronto. O agente já começa a mandar dados na hora e, sozinho, se registra
+para iniciar automaticamente com o Windows — não precisa rodar mais nada
+depois disso, mesmo que a máquina reinicie. Para a próxima máquina, é só
+repetir o passo 1 acima (cadastro) e os passos 1–4 (copiar e clicar).
+
+> Se não der para "Executar como Administrador" na primeira vez, o agente
+> ainda funciona (fica rodando enquanto a janela ficar aberta) e avisa na
+> tela que não conseguiu se registrar para iniciar sozinho — nesse caso,
+> repita o clique como Administrador quando puder.
+
+## Alternativa: instalador PowerShell (`instalar.ps1`)
+
+Só é necessário se você já tem o `.exe` mas não tem como copiar um
+`config.json` junto (ex.: instalação remota via um único link). Baixa o
+`.exe`, grava a configuração a partir do `-Token` informado e testa antes
+de registrar a tarefa:
 
 ```powershell
 irm https://raw.githubusercontent.com/fernandocamposti/panorama-home-center/main/instalar.ps1 -OutFile instalar.ps1
 .\instalar.ps1 -Token "TOKEN_GERADO_NO_CADASTRO"
 ```
 
-O `instalar.ps1` baixa o `.exe`, grava a configuração, testa por alguns
-segundos e registra uma Tarefa Agendada do Windows (roda no boot, reinicia
-sozinha se cair) — sem precisar de Node.js nem de nenhuma ferramenta extra
-na máquina de destino. É o fluxo pensado para instalar em várias máquinas
-rapidamente: só muda o `-Token` a cada uma.
-
-> **Nota de verificação**: o build do `.exe` e o `instalar.ps1` foram
-> revisados com cuidado, mas não puderam ser executados ponta a ponta neste
-> ambiente (sem acesso a uma máquina Windows real para testar). Na primeira
-> instalação, acompanhe a saída do `instalar.ps1` — ele testa o agente
-> manualmente por 8 segundos antes de registrar a tarefa, e avisa se algo
-> falhar nesse teste.
+> **Nota de verificação**: o build do `.exe`, a auto-instalação embutida
+> nele e o `instalar.ps1` foram revisados com cuidado, mas não puderam ser
+> executados ponta a ponta neste ambiente (sem acesso a uma máquina
+> Windows real para testar). Teste na primeira máquina e confira se o
+> agente aparece "online" no painel depois de alguns minutos.
 
 ## Instalar o agente — Windows, com Node.js (alternativa já testada ponta a ponta)
 

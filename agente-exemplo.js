@@ -17,7 +17,10 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { execFileSync } = require("child_process");
 const si = require("systeminformation");
+
+const TASK_NAME = "PanoramaAgent";
 
 function carregarConfig() {
   // process.pkg só existe quando rodando dentro do executável compilado —
@@ -34,6 +37,21 @@ function carregarConfig() {
     }
   }
 
+  // Permite passar o token como argumento na primeira execução (ex.: um
+  // atalho "panorama-agent.exe SEU_TOKEN"). Uma vez gravado em config.json,
+  // as próximas execuções (inclusive via tarefa agendada) não precisam mais
+  // do argumento.
+  const tokenArg = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : null;
+  if (tokenArg && tokenArg !== arquivo.token) {
+    arquivo.token = tokenArg;
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(arquivo, null, 2));
+      console.log(`[agente] Token gravado em ${configPath}.`);
+    } catch (e) {
+      console.error(`[agente] Não consegui gravar ${configPath}:`, e.message);
+    }
+  }
+
   return {
     apiUrl: process.env.PANORAMA_API_URL || arquivo.apiUrl || "https://painel.panoramahc.com.br/api",
     token: process.env.PANORAMA_AGENT_TOKEN || arquivo.token,
@@ -46,10 +64,55 @@ const config = carregarConfig();
 
 if (!config.token) {
   console.error(
-    `[agente] Token não configurado. Crie o arquivo "${config.configPath}" com {"token": "...", "apiUrl": "..."} ou defina PANORAMA_AGENT_TOKEN. Encerrando.`
+    `[agente] Token não configurado. Coloque um "config.json" com {"token": "...", "apiUrl": "..."} na mesma pasta do executável, ou rode "panorama-agent.exe SEU_TOKEN" uma vez. Encerrando.`
   );
   process.exit(1);
 }
+
+// Se estiver rodando como o .exe compilado no Windows, se registra sozinho
+// para iniciar com o sistema — assim a pessoa só precisa dar 2 cliques (ou
+// "Executar como Administrador") UMA vez; nas próximas vezes o Windows já
+// inicia o agente automaticamente, sem precisar rodar nada manualmente.
+function garantirInicioAutomatico() {
+  if (process.platform !== "win32" || !process.pkg) return;
+
+  try {
+    execFileSync("schtasks", ["/query", "/tn", TASK_NAME], { stdio: "ignore" });
+    return; // já está instalado
+  } catch {
+    // ainda não existe — tenta criar abaixo
+  }
+
+  const exePath = process.execPath;
+
+  try {
+    // Precisa ser Administrador: roda mesmo sem ninguém logado, reinicia com a máquina.
+    execFileSync(
+      "schtasks",
+      ["/create", "/tn", TASK_NAME, "/tr", `"${exePath}"`, "/sc", "onstart", "/ru", "SYSTEM", "/rl", "HIGHEST", "/f"],
+      { stdio: "ignore" }
+    );
+    console.log(`[agente] Instalado para iniciar sozinho com o Windows (tarefa "${TASK_NAME}").`);
+    return;
+  } catch {
+    // sem privilégio de Administrador — tenta um modo que não exige elevação
+  }
+
+  try {
+    execFileSync("schtasks", ["/create", "/tn", TASK_NAME, "/tr", `"${exePath}"`, "/sc", "onlogon", "/f"], {
+      stdio: "ignore",
+    });
+    console.log(
+      `[agente] Instalado para iniciar sozinho ao entrar no Windows (tarefa "${TASK_NAME}"). Para iniciar mesmo sem login, dê 1 clique com "Executar como Administrador".`
+    );
+  } catch (e) {
+    console.warn(
+      `[agente] Não consegui me registrar para iniciar sozinho (${e.message}). Vou continuar rodando agora, mas não sobrevivo a um reinício — dê 1 clique com "Executar como Administrador" para isso ficar automático.`
+    );
+  }
+}
+
+garantirInicioAutomatico();
 
 // Coleta as métricas atuais da máquina (mesma chamada funciona em Windows e Linux)
 async function coletarMetricas() {

@@ -3,3 +3,4 @@ node_modules/
 *.log
 dist/
 agent-releases/*.exe
+pacotes-agente/

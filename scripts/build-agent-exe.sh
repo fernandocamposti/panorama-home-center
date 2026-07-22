@@ -24,7 +24,7 @@ docker run --rm -v "$(pwd)":/work -w /work node:22 sh -c '
 EOF
   npm install --no-audit --no-fund
   npm install --no-save @yao-pkg/pkg
-  npx pkg agente-exemplo.js -t node22-win-x64 -o /work/agent-releases/panorama-agent.exe
+  npx pkg agente-exemplo.js -t node22-win-x64 --no-bytecode --public-packages "*" --public -o /work/agent-releases/panorama-agent.exe
 '
 
 echo ""

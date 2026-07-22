@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: panorama
-      POSTGRES_PASSWORD: TROQUE_ESTA_SENHA
+      POSTGRES_PASSWORD: 4f3db4a9d23e533261103b41d7a2bae4
       POSTGRES_DB: panorama
     volumes:
       - panorama_pg_data:/var/lib/postgresql/data
@@ -40,7 +40,7 @@ services:
     container_name: panorama_api
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://panorama:TROQUE_ESTA_SENHA@panorama_postgres:5432/panorama
+      DATABASE_URL: postgres://panorama:4f3db4a9d23e533261103b41d7a2bae4@panorama_postgres:5432/panorama
       REDIS_URL: redis://panorama_redis:6379
       NODE_ENV: production
     depends_on:
