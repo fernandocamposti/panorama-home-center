@@ -175,10 +175,23 @@ async function resolverConfig() {
   };
 }
 
+// Incrementar sempre que o comando registrado na tarefa mudar (ex.: novos
+// argumentos) — força recriar a tarefa em máquinas que já tinham uma versão
+// antiga, mesmo que o marcador local diga que "já está tudo certo".
+const VERSAO_TAREFA = 2;
+
 // Se estiver rodando como o .exe compilado no Windows, se registra sozinho
 // para iniciar com o sistema — assim a pessoa só precisa dar 2 cliques (ou
 // "Executar como Administrador") UMA vez; nas próximas vezes o Windows já
 // inicia o agente automaticamente, sem precisar rodar nada manualmente.
+//
+// A tarefa é registrada com o argumento extra "--servico": é assim que o
+// processo iniciado PELA PRÓPRIA tarefa (em segundo plano, sem janela)
+// sabe que já é a instância definitiva e não deve tentar se "entregar" pra
+// tarefa de novo — sem essa marcação, a instância de segundo plano também
+// achava que precisava repassar o trabalho e se encerrava sozinha logo
+// depois do 1º checkin, e o dispositivo nunca ficava online de verdade
+// (bug real, encontrado em produção).
 //
 // Devolve o nível de automação conseguido, pra quem chamou decidir se dá
 // pra entregar o trabalho pra essa tarefa e fechar a janela com segurança:
@@ -199,11 +212,12 @@ function garantirInicioAutomatico(exePath) {
   // persistente. Não depende de idioma nem de parsear texto nenhum.
   const marcadorPath = path.join(path.dirname(exePath), "tarefa-status.json");
   const marcador = lerJsonSeExistir(marcadorPath);
+  const comando = `"${exePath}" --servico`;
 
-  if (marcador.modo === "invisivel" || marcador.modo === "visivel-logon") {
+  if ((marcador.modo === "invisivel" || marcador.modo === "visivel-logon") && marcador.versao === VERSAO_TAREFA) {
     try {
       execFileSync("schtasks", ["/query", "/tn", TASK_NAME], { stdio: "ignore" });
-      return marcador.modo; // tarefa ainda existe, confia no que já sabíamos
+      return marcador.modo; // tarefa ainda existe e já está na versão certa
     } catch {
       // tarefa sumiu (removida manualmente?) — recria do zero abaixo
     }
@@ -213,10 +227,10 @@ function garantirInicioAutomatico(exePath) {
     // Precisa ser Administrador: roda mesmo sem ninguém logado, reinicia com a máquina.
     execFileSync(
       "schtasks",
-      ["/create", "/tn", TASK_NAME, "/tr", `"${exePath}"`, "/sc", "onstart", "/ru", "SYSTEM", "/rl", "HIGHEST", "/f"],
+      ["/create", "/tn", TASK_NAME, "/tr", comando, "/sc", "onstart", "/ru", "SYSTEM", "/rl", "HIGHEST", "/f"],
       { stdio: "ignore" }
     );
-    salvarJson(marcadorPath, { modo: "invisivel" });
+    salvarJson(marcadorPath, { modo: "invisivel", versao: VERSAO_TAREFA });
     console.log(`[agente] Instalado para iniciar sozinho com o Windows (tarefa "${TASK_NAME}").`);
     return "invisivel";
   } catch {
@@ -224,10 +238,10 @@ function garantirInicioAutomatico(exePath) {
   }
 
   try {
-    execFileSync("schtasks", ["/create", "/tn", TASK_NAME, "/tr", `"${exePath}"`, "/sc", "onlogon", "/f"], {
+    execFileSync("schtasks", ["/create", "/tn", TASK_NAME, "/tr", comando, "/sc", "onlogon", "/f"], {
       stdio: "ignore",
     });
-    salvarJson(marcadorPath, { modo: "visivel-logon" });
+    salvarJson(marcadorPath, { modo: "visivel-logon", versao: VERSAO_TAREFA });
     console.log(
       `[agente] Instalado para iniciar sozinho ao entrar no Windows (tarefa "${TASK_NAME}"). Para iniciar mesmo sem login e sem precisar manter nenhuma janela aberta, dê 1 clique com "Executar como Administrador".`
     );
@@ -352,11 +366,17 @@ async function iniciar() {
   const config = await resolverConfig();
 
   const statusInicio = garantirInicioAutomatico(config.exePersistente);
+  // Se este processo foi iniciado PELA PRÓPRIA tarefa do Windows (em
+  // segundo plano), ele já é a instância definitiva — não deve tentar se
+  // "entregar" de novo pra tarefa e sair, senão nunca sobra ninguém rodando
+  // de verdade (era esse o bug: dispositivo nunca ficava online porque
+  // cada instância morria logo após o 1º checkin).
+  const ehInstanciaDeServico = process.argv.includes("--servico");
 
   console.log(`[agente] Iniciando — enviando para ${config.apiUrl} a cada ${config.intervalMs / 1000}s`);
   await cicloDeChekin(config);
 
-  if (statusInicio === "invisivel") {
+  if (statusInicio === "invisivel" && !ehInstanciaDeServico) {
     // Já existe uma tarefa do Windows rodando isso como SYSTEM (sem janela,
     // sem precisar de login). Em vez de depender desta janela continuar
     // aberta pra sempre, aciona essa tarefa agora mesmo e entrega o
