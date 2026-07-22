@@ -24,8 +24,12 @@ O agente sozinho:
 1. Se copia para `C:\ProgramData\PanoramaAgent` (pasta fixa, para
    sobreviver mesmo se você apagar o `.exe` que baixou).
 2. Se cadastra automaticamente no painel.
-3. Se registra para iniciar com o Windows (sobrevive a reinício).
-4. Começa a mandar métricas na hora.
+3. Se registra para iniciar com o Windows, como tarefa do sistema (SYSTEM) —
+   sobrevive a reinício e não depende de ninguém logado.
+4. Aciona essa tarefa agora mesmo e entrega o monitoramento pra ela — a
+   janela do Prompt de Comando avisa **"Pode fechar esta janela"** e a
+   partir daí o agente continua rodando escondido, sem nenhuma janela
+   aberta.
 
 Ele aparece no painel como **"não organizado"** — dá pra ver e organizar
 (nome, tipo, filial, departamento) direto em
@@ -33,9 +37,10 @@ Ele aparece no painel como **"não organizado"** — dá pra ver e organizar
 dashboard. Não precisa saber o nome/filial da máquina antes de instalar.
 
 > Se não der para "Executar como Administrador" na primeira vez, o agente
-> ainda funciona (fica rodando enquanto a janela ficar aberta) e avisa na
-> tela que não conseguiu se registrar para iniciar sozinho — nesse caso,
-> repita o clique como Administrador quando puder.
+> registra uma versão mais limitada da tarefa (só inicia quando alguém
+> loga) e avisa na tela **"esta janela precisa continuar aberta"** — nesse
+> caso, feche e repita o clique como Administrador para não depender de
+> manter nenhuma janela aberta.
 
 > **Nota de verificação**: o auto-cadastro, a auto-instalação e o build do
 > `.exe` foram revisados e testados com um servidor mock (simulando a API)

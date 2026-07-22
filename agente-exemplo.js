@@ -179,12 +179,21 @@ async function resolverConfig() {
 // para iniciar com o sistema — assim a pessoa só precisa dar 2 cliques (ou
 // "Executar como Administrador") UMA vez; nas próximas vezes o Windows já
 // inicia o agente automaticamente, sem precisar rodar nada manualmente.
+//
+// Devolve o nível de automação conseguido, pra quem chamou decidir se dá
+// pra entregar o trabalho pra essa tarefa e fechar a janela com segurança:
+//   "invisivel"     → tarefa rodando como SYSTEM: inicia sozinha com o
+//                      Windows, sem precisar de login e sem abrir janela.
+//   "visivel-logon" → tarefa só por usuário (sem elevação): só inicia
+//                      quando a pessoa loga, e ainda abre uma janela —
+//                      fechar esta janela agora derrubaria o monitoramento.
+//   "falhou"        → não conseguiu registrar nada.
 function garantirInicioAutomatico(exePath) {
-  if (process.platform !== "win32" || !process.pkg) return;
+  if (process.platform !== "win32" || !process.pkg) return "sem-suporte";
 
   try {
-    execFileSync("schtasks", ["/query", "/tn", TASK_NAME], { stdio: "ignore" });
-    return; // já está instalado
+    const saida = execFileSync("schtasks", ["/query", "/tn", TASK_NAME, "/fo", "list", "/v"], { encoding: "utf8" });
+    return /Run As User:\s*SYSTEM/i.test(saida) ? "invisivel" : "visivel-logon";
   } catch {
     // ainda não existe — tenta criar abaixo
   }
@@ -197,7 +206,7 @@ function garantirInicioAutomatico(exePath) {
       { stdio: "ignore" }
     );
     console.log(`[agente] Instalado para iniciar sozinho com o Windows (tarefa "${TASK_NAME}").`);
-    return;
+    return "invisivel";
   } catch {
     // sem privilégio de Administrador — tenta um modo que não exige elevação
   }
@@ -207,12 +216,14 @@ function garantirInicioAutomatico(exePath) {
       stdio: "ignore",
     });
     console.log(
-      `[agente] Instalado para iniciar sozinho ao entrar no Windows (tarefa "${TASK_NAME}"). Para iniciar mesmo sem login, dê 1 clique com "Executar como Administrador".`
+      `[agente] Instalado para iniciar sozinho ao entrar no Windows (tarefa "${TASK_NAME}"). Para iniciar mesmo sem login e sem precisar manter nenhuma janela aberta, dê 1 clique com "Executar como Administrador".`
     );
+    return "visivel-logon";
   } catch (e) {
     console.warn(
-      `[agente] Não consegui me registrar para iniciar sozinho (${e.message}). Vou continuar rodando agora, mas não sobrevivo a um reinício — dê 1 clique com "Executar como Administrador" para isso ficar automático.`
+      `[agente] Não consegui me registrar para iniciar sozinho (${e.message}). Vou continuar rodando agora, mas não sobrevivo a um reinício nem a esta janela sendo fechada — dê 1 clique com "Executar como Administrador" para isso ficar automático.`
     );
+    return "falhou";
   }
 }
 
@@ -280,10 +291,36 @@ async function cicloDeChekin(config) {
 async function iniciar() {
   const config = await resolverConfig();
 
-  garantirInicioAutomatico(config.exePersistente);
+  const statusInicio = garantirInicioAutomatico(config.exePersistente);
 
   console.log(`[agente] Iniciando — enviando para ${config.apiUrl} a cada ${config.intervalMs / 1000}s`);
   await cicloDeChekin(config);
+
+  if (statusInicio === "invisivel") {
+    // Já existe uma tarefa do Windows rodando isso como SYSTEM (sem janela,
+    // sem precisar de login). Em vez de depender desta janela continuar
+    // aberta pra sempre, aciona essa tarefa agora mesmo e entrega o
+    // monitoramento pra ela — sem isso, fechar a janela derrubava o
+    // monitoramento até o próximo login/reinício.
+    try {
+      execFileSync("schtasks", ["/run", "/tn", TASK_NAME], { stdio: "ignore" });
+      console.log(
+        `[agente] Já está rodando em segundo plano (tarefa "${TASK_NAME}" do Windows, sem precisar de login). Pode fechar esta janela — o monitoramento continua.`
+      );
+      process.exit(0);
+    } catch (e) {
+      console.warn(
+        `[agente] Registrei a tarefa mas não consegui iniciá-la agora (${e.message}). Vou continuar por esta janela até o próximo reinício — a partir dele, fica automático mesmo com a janela fechada.`
+      );
+    }
+  } else if (statusInicio === "visivel-logon") {
+    console.log(
+      '[agente] Aviso: sem privilégio de Administrador, esta janela precisa continuar aberta para o monitoramento funcionar. Feche e rode de novo com "Executar como Administrador" para isso ficar automático, sem precisar manter nenhuma janela aberta.'
+    );
+  } else if (process.platform === "win32" && (statusInicio === "falhou" || statusInicio === "sem-suporte")) {
+    console.warn("[agente] Esta janela precisa continuar aberta para o monitoramento funcionar.");
+  }
+
   setInterval(() => cicloDeChekin(config), config.intervalMs);
 }
 
