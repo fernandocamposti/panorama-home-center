@@ -91,7 +91,14 @@ function garantirInstalado(dirAtual) {
 
 async function autoCadastrar(apiUrl, chaveMaquina, hostname) {
   const chaveInstalacao = process.env.PANORAMA_ENROLL_KEY || CHAVE_INSTALACAO_EMBUTIDA;
-  if (!chaveInstalacao || chaveInstalacao === "__PANORAMA_ENROLL_KEY__") {
+  // Não compara com o texto literal do placeholder da constante acima,
+  // porque o script de build faz um "sed" global no arquivo inteiro: se o
+  // placeholder aparecesse igual nos dois lugares (na constante E nesta
+  // checagem), a substituição trocaria os dois ao mesmo tempo e a
+  // comparação sempre bateria consigo mesma, quebrando a validação mesmo
+  // com a chave certa embutida (bug real, encontrado em produção). Em vez
+  // disso, valida o formato esperado (hex gerado por "openssl rand -hex 24").
+  if (!chaveInstalacao || !/^[0-9a-f]{32,}$/i.test(chaveInstalacao)) {
     throw new Error(
       'Este .exe não tem uma "chave de instalação" embutida (foi rodado via "node agente-exemplo.js" sem PANORAMA_ENROLL_KEY, ou o build não passou por scripts/build-agent-exe.sh).'
     );
