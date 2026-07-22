@@ -257,16 +257,21 @@ function resumirDiscos(discos) {
     .join(", ");
 }
 
-// Coleta as métricas atuais da máquina (mesma chamada funciona em Windows e Linux)
+// Coleta as métricas atuais da máquina (mesma chamada funciona em Windows e Linux).
+// Cada chamada tem seu próprio .catch(): numa máquina real (VM, hardening de
+// permissões, etc.) é comum uma dessas consultas específicas falhar — sem
+// isso, UMA falha (ex.: si.cpu() sem permissão) derrubava o Promise.all
+// inteiro e cancelava o checkin todo, inclusive CPU/memória/disco que
+// sempre funcionaram. Assim, manda o que conseguir coletar em vez de nada.
 async function coletarMetricas() {
   const [cpuLoad, mem, fsSize, osInfo, sysInfo, cpuInfo, discoLayout] = await Promise.all([
-    si.currentLoad(),
-    si.mem(),
-    si.fsSize(),
-    si.osInfo(),
-    si.system(),
-    si.cpu(),
-    si.diskLayout().catch(() => []), // pode falhar sem privilégio em alguns SOs — não trava o checkin por isso
+    si.currentLoad().catch((e) => (console.warn("[agente] si.currentLoad() falhou:", e.message), { currentLoad: 0 })),
+    si.mem().catch((e) => (console.warn("[agente] si.mem() falhou:", e.message), { active: 0, total: 0 })),
+    si.fsSize().catch((e) => (console.warn("[agente] si.fsSize() falhou:", e.message), [])),
+    si.osInfo().catch((e) => (console.warn("[agente] si.osInfo() falhou:", e.message), { distro: "", release: "", arch: null })),
+    si.system().catch((e) => (console.warn("[agente] si.system() falhou:", e.message), { manufacturer: null, model: null })),
+    si.cpu().catch((e) => (console.warn("[agente] si.cpu() falhou:", e.message), { manufacturer: null, brand: null })),
+    si.diskLayout().catch((e) => (console.warn("[agente] si.diskLayout() falhou:", e.message), [])),
   ]);
 
   const discoPrincipal = fsSize[0] || { size: 0, used: 0 };
@@ -318,7 +323,9 @@ async function cicloDeChekin(config) {
   try {
     const metricas = await coletarMetricas();
     await enviarCheckin(config, metricas);
-    console.log(`[agente] Checkin OK — CPU ${metricas.cpu_pct}% | MEM ${metricas.mem_pct}% | DISCO ${metricas.disco_pct}%`);
+    console.log(
+      `[agente] Checkin OK — CPU ${metricas.cpu_pct}% | MEM ${metricas.mem_pct}% | DISCO ${metricas.disco_pct}% | IP ${metricas.ip || "?"} | CPU: ${metricas.processador || "?"} | Disco: ${metricas.disco_resumo || "?"}`
+    );
   } catch (erro) {
     // Em produção: guardar o payload numa fila local (arquivo/sqlite) e
     // reenviar no próximo ciclo, para não perder dados quando a rede cair.
