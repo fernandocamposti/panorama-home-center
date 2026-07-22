@@ -9,6 +9,7 @@ import AlertsList from "./AlertsList.jsx";
 import RecentAssetsTable from "./RecentAssetsTable.jsx";
 import TopDepartments from "./TopDepartments.jsx";
 import PendingDevices from "./PendingDevices.jsx";
+import AgentsPage from "./AgentsPage.jsx";
 
 const TIPO_LABEL = {
   computador: "Computadores",
@@ -20,6 +21,7 @@ const TIPO_LABEL = {
 };
 
 export default function Dashboard({ onLogout }) {
+  const [pagina, setPagina] = useState("dashboard");
   const [resumo, setResumo] = useState(null);
   const [porSo, setPorSo] = useState([]);
   const [alertas, setAlertas] = useState([]);
@@ -54,8 +56,8 @@ export default function Dashboard({ onLogout }) {
   }, []);
 
   useEffect(() => {
-    carregar();
-  }, [carregar]);
+    if (pagina === "dashboard") carregar();
+  }, [carregar, pagina]);
 
   function handleLogout() {
     clearToken();
@@ -67,63 +69,74 @@ export default function Dashboard({ onLogout }) {
 
   return (
     <div className="min-h-screen flex bg-[#0b1220]">
-      <Sidebar />
+      <Sidebar pagina={pagina} onNavegar={setPagina} />
 
       <div className="flex-1 min-w-0">
-        <Topbar onRefresh={carregar} onLogout={handleLogout} atualizadoEm={atualizadoEm} />
+        <Topbar
+          titulo={pagina === "agents" ? "Agents" : "Dashboard"}
+          onRefresh={pagina === "dashboard" ? carregar : undefined}
+          onLogout={handleLogout}
+          atualizadoEm={pagina === "dashboard" ? atualizadoEm : ""}
+        />
 
         <main className="p-6 space-y-6">
-          {erro && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg px-4 py-3">
-              {erro}
-            </div>
-          )}
-
-          {carregando && !resumo ? (
-            <p className="text-gray-400 text-sm">Carregando...</p>
+          {pagina === "agents" ? (
+            <AgentsPage />
           ) : (
-            resumo && (
-              <>
-                <PendingDevices />
+            <>
+              {erro && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg px-4 py-3">
+                  {erro}
+                </div>
+              )}
 
-                <div className="flex flex-wrap gap-4">
-                  {cardsBase.map((tipo) => {
-                    const t = porTipoMap[tipo];
-                    return (
+              {carregando && !resumo ? (
+                <p className="text-gray-400 text-sm">Carregando...</p>
+              ) : (
+                resumo && (
+                  <>
+                    <PendingDevices />
+
+                    <div className="flex flex-wrap gap-4">
+                      {cardsBase.map((tipo) => {
+                        const t = porTipoMap[tipo];
+                        return (
+                          <StatCard
+                            key={tipo}
+                            titulo={TIPO_LABEL[tipo]}
+                            valor={t ? `${t.online} / ${Number(t.total)}` : "0 / 0"}
+                            corValor="text-white"
+                            nota={t ? `${t.online} online, ${t.offline} offline` : "sem ativos cadastrados"}
+                          />
+                        );
+                      })}
                       <StatCard
-                        key={tipo}
-                        titulo={TIPO_LABEL[tipo]}
-                        valor={t ? `${t.online} / ${Number(t.total)}` : "0 / 0"}
-                        corValor="text-white"
-                        nota={t ? `${t.online} online, ${t.offline} offline` : "sem ativos cadastrados"}
+                        titulo="Alertas Críticos"
+                        valor={resumo.alertas_criticos}
+                        corValor={resumo.alertas_criticos > 0 ? "text-red-400" : "text-green-400"}
+                        nota="em aberto agora"
                       />
-                    );
-                  })}
-                  <StatCard
-                    titulo="Alertas Críticos"
-                    valor={resumo.alertas_criticos}
-                    corValor={resumo.alertas_criticos > 0 ? "text-red-400" : "text-green-400"}
-                    nota="em aberto agora"
-                  />
-                </div>
+                    </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2">
-                    <BranchTable filiais={resumo.por_filial} />
-                  </div>
-                  <SoDonut dados={porSo} />
-                </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      <div className="lg:col-span-2">
+                        <BranchTable filiais={resumo.por_filial} />
+                      </div>
+                      <SoDonut dados={porSo} />
+                    </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2">
-                    <RecentAssetsTable ativos={ultimosAtivos} />
-                  </div>
-                  <AlertsList alertas={alertas} />
-                </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      <div className="lg:col-span-2">
+                        <RecentAssetsTable ativos={ultimosAtivos} />
+                      </div>
+                      <AlertsList alertas={alertas} />
+                    </div>
 
-                <TopDepartments departamentos={departamentos} />
-              </>
-            )
+                    <TopDepartments departamentos={departamentos} />
+                  </>
+                )
+              )}
+            </>
           )}
         </main>
       </div>
