@@ -295,7 +295,9 @@ async function coletarMetricas() {
       ? Number(((discoPrincipal.used / discoPrincipal.size) * 100).toFixed(1))
       : null,
     disco_total_gb: Number((discoPrincipal.size / 1e9).toFixed(1)),
-    uptime_s: os.uptime(),
+    // Arredondado: os.uptime() vem com casas decimais e o banco guarda isso
+    // como inteiro (BIGINT) — mandar com decimal quebrava o checkin (HTTP 500).
+    uptime_s: Math.round(os.uptime()),
     timestamp: new Date().toISOString(),
   };
 }

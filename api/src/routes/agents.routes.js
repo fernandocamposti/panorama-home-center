@@ -124,7 +124,11 @@ module.exports = async function agentsRoutes(fastify) {
         mem_total_gb ?? null,
         disco_total_gb ?? null,
         disco_resumo || null,
-        uptime_s ?? null,
+        // uptime_s é BIGINT no banco — os.uptime() no agente vem com casas
+        // decimais (ex.: 213456.789s), e Postgres rejeita float em BIGINT
+        // (foi um 500 real em produção). Arredonda aqui como segunda camada
+        // de proteção, além do agente já mandar arredondado.
+        uptime_s != null ? Math.round(uptime_s) : null,
       ]
     );
 
