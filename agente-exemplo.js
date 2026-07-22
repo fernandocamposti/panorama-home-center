@@ -191,11 +191,22 @@ async function resolverConfig() {
 function garantirInicioAutomatico(exePath) {
   if (process.platform !== "win32" || !process.pkg) return "sem-suporte";
 
-  try {
-    const saida = execFileSync("schtasks", ["/query", "/tn", TASK_NAME, "/fo", "list", "/v"], { encoding: "utf8" });
-    return /Run As User:\s*SYSTEM/i.test(saida) ? "invisivel" : "visivel-logon";
-  } catch {
-    // ainda não existe — tenta criar abaixo
+  // Em vez de tentar adivinhar como a tarefa está configurada lendo a saída
+  // de "schtasks /query" (o texto vem no idioma do Windows — "Run As User"
+  // só existe em inglês; num Windows em português a detecção sempre falhava
+  // e caía no modo "sem privilégio", mesmo com a tarefa já sendo SYSTEM),
+  // guarda o resultado da própria criação num arquivo ao lado do .exe
+  // persistente. Não depende de idioma nem de parsear texto nenhum.
+  const marcadorPath = path.join(path.dirname(exePath), "tarefa-status.json");
+  const marcador = lerJsonSeExistir(marcadorPath);
+
+  if (marcador.modo === "invisivel" || marcador.modo === "visivel-logon") {
+    try {
+      execFileSync("schtasks", ["/query", "/tn", TASK_NAME], { stdio: "ignore" });
+      return marcador.modo; // tarefa ainda existe, confia no que já sabíamos
+    } catch {
+      // tarefa sumiu (removida manualmente?) — recria do zero abaixo
+    }
   }
 
   try {
@@ -205,6 +216,7 @@ function garantirInicioAutomatico(exePath) {
       ["/create", "/tn", TASK_NAME, "/tr", `"${exePath}"`, "/sc", "onstart", "/ru", "SYSTEM", "/rl", "HIGHEST", "/f"],
       { stdio: "ignore" }
     );
+    salvarJson(marcadorPath, { modo: "invisivel" });
     console.log(`[agente] Instalado para iniciar sozinho com o Windows (tarefa "${TASK_NAME}").`);
     return "invisivel";
   } catch {
@@ -215,6 +227,7 @@ function garantirInicioAutomatico(exePath) {
     execFileSync("schtasks", ["/create", "/tn", TASK_NAME, "/tr", `"${exePath}"`, "/sc", "onlogon", "/f"], {
       stdio: "ignore",
     });
+    salvarJson(marcadorPath, { modo: "visivel-logon" });
     console.log(
       `[agente] Instalado para iniciar sozinho ao entrar no Windows (tarefa "${TASK_NAME}"). Para iniciar mesmo sem login e sem precisar manter nenhuma janela aberta, dê 1 clique com "Executar como Administrador".`
     );
